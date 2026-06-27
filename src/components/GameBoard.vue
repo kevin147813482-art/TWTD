@@ -11,15 +11,6 @@
 
     <!-- ══ AI 区（上半） ══ -->
     <div class="section ai-section">
-      <!-- AI HP 栏 -->
-      <div class="section-hpbar ai-hpbar">
-        <span class="hpbar-label ai-label">AI</span>
-        <span v-for="i in store.aiJiangMaxHp" :key="i"
-          :class="['hp', i <= store.aiJiangHp ? 'on' : 'off']">♥</span>
-        <span class="hpbar-score">擊{{ store.aiScore }}</span>
-      </div>
-
-      <!-- 棋盘（AI） -->
       <div class="grid-wrap">
         <div class="board-grid">
           <template v-for="(row, ri) in store.aiBoard" :key="ri">
@@ -30,15 +21,14 @@
                 'cell-unlocked': cell.kind === 'unlocked',
                 'cell-locked':   cell.kind === 'locked',
               }">
-              <!-- 蔣（AI: [0,0]） -->
+              <!-- 蔣（AI: [0,0]）带HP血条 -->
               <div v-if="ri === AI_JIANG_CELL[0] && ci === AI_JIANG_CELL[1]"
-                class="path-icon jiang-icon">
+                class="jiang-cell">
+                <div class="jiang-hp-row">
+                  <span v-for="i in store.aiJiangMaxHp" :key="i"
+                    :class="['jhp', i <= store.aiJiangHp ? 'on' : 'off']">♥</span>
+                </div>
                 <span class="jiang-char">蔣</span>
-              </div>
-              <!-- 营（AI: [0,7]） -->
-              <div v-else-if="ri === AI_YING_CELL[0] && ci === AI_YING_CELL[1]"
-                class="path-icon ying-icon">
-                <span class="ying-char">營</span>
               </div>
               <!-- 单位 -->
               <div v-else-if="cell.unit" class="unit"
@@ -46,7 +36,6 @@
                 {{ cell.unit.type === 'general_char' ? cell.unit.char : cell.unit.key }}
                 <span v-if="cell.unit.level > 1" class="lv">{{ cell.unit.level }}</span>
               </div>
-              <div v-else-if="cell.kind === 'locked'" class="lock-plus">+</div>
             </div>
           </template>
         </div>
@@ -70,7 +59,6 @@
 
     <!-- ══ 玩家区（下半） ══ -->
     <div class="section player-section">
-      <!-- 棋盘（玩家） -->
       <div class="grid-wrap">
         <div class="board-grid">
           <template v-for="(row, ri) in store.playerBoard" :key="ri">
@@ -86,15 +74,14 @@
               @dragleave="dragOver = null"
               @drop="onDrop(ri, ci)"
               @click="onCellClick(ri, ci)">
-              <!-- 蔣（玩家: [4,7]） -->
+              <!-- 蔣（玩家: [4,7]）带HP血条 -->
               <div v-if="ri === PLAYER_JIANG_CELL[0] && ci === PLAYER_JIANG_CELL[1]"
-                class="path-icon jiang-icon" :class="{ damaged: jiangFlash }">
+                class="jiang-cell" :class="{ damaged: jiangFlash }">
+                <div class="jiang-hp-row">
+                  <span v-for="i in store.playerJiangMaxHp" :key="i"
+                    :class="['jhp', i <= store.playerJiangHp ? 'on' : 'off']">♥</span>
+                </div>
                 <span class="jiang-char">蔣</span>
-              </div>
-              <!-- 营（玩家: [4,0]） -->
-              <div v-else-if="ri === PLAYER_YING_CELL[0] && ci === PLAYER_YING_CELL[1]"
-                class="path-icon ying-icon">
-                <span class="ying-char">營</span>
               </div>
               <!-- 单位 -->
               <div v-else-if="cell.unit" class="unit"
@@ -120,37 +107,49 @@
           </div>
         </div>
       </div>
-
-      <!-- 玩家 HP 栏 -->
-      <div class="section-hpbar player-hpbar">
-        <span class="hpbar-label">我</span>
-        <span v-for="i in store.playerJiangMaxHp" :key="i"
-          :class="['hp', i <= store.playerJiangHp ? 'on' : 'off']">♥</span>
-      </div>
     </div>
 
-    <!-- 手牌区 -->
-    <div class="hand-bar">
-      <div class="hand-cards">
-        <div v-for="(card, i) in store.playerHand" :key="i"
-          class="card"
-          :class="{ empty: !card, selected: selectedCard === i }"
-          draggable="true"
-          @dragstart="dragging = i"
-          @dragend="dragging = null"
-          @click="onCardClick(i)">
-          <template v-if="card">
-            <span class="card-char" :style="cardStyle(card)">{{ card.key }}</span>
-            <span v-if="card.level" class="card-lv">{{ card.level }}</span>
-          </template>
+    <!-- ══ 底部操作区 ══ -->
+    <div class="bottom-ui">
+      <!-- 手牌行：营 + 手牌 + 铲子 -->
+      <div class="hand-row">
+        <!-- 营 图标 -->
+        <div class="side-icon ying-icon">
+          <span class="side-icon-char">營</span>
+        </div>
+
+        <!-- 手牌 -->
+        <div class="hand-cards">
+          <div v-for="(card, i) in store.playerHand" :key="i"
+            class="card"
+            :class="{ empty: !card, selected: selectedCard === i }"
+            draggable="true"
+            @dragstart="dragging = i"
+            @dragend="dragging = null"
+            @click="onCardClick(i)">
+            <template v-if="card">
+              <span class="card-char" :style="cardStyle(card)">{{ card.key }}</span>
+              <span v-if="card.level" class="card-lv">{{ card.level }}</span>
+            </template>
+          </div>
+        </div>
+
+        <!-- 铲子/广告 图标 -->
+        <div class="side-icon shovel-icon" @click="onGetShovel">
+          <span class="side-icon-char">⛏</span>
+          <span class="side-icon-sub">x2</span>
         </div>
       </div>
-      <button class="recruit-btn"
-        :class="{ disabled: !store.canPlayerRecruit }"
-        @click="store.playerRecruit()">
-        <span>征兵</span>
-        <span class="cost">🍞{{ store.playerRecruitCost }}</span>
-      </button>
+
+      <!-- 征兵按钮行 -->
+      <div class="recruit-row">
+        <button class="recruit-btn"
+          :class="{ disabled: !store.canPlayerRecruit }"
+          @click="store.playerRecruit()">
+          <span>征兵</span>
+          <span class="cost">🍞{{ store.playerRecruitCost }}</span>
+        </button>
+      </div>
     </div>
 
     <!-- 单位弹窗 -->
@@ -234,6 +233,10 @@ function onDrop(r, c) {
   else store.deployUnit(dragging.value, r, c)
   dragging.value = null
 }
+
+function onGetShovel() {
+  // 预留：看广告获得铲子
+}
 </script>
 
 <style scoped>
@@ -269,24 +272,6 @@ function onDrop(r, c) {
 .boss-tag { color: #ff4444; font-weight: bold; animation: pulse 0.4s infinite alternate; }
 @keyframes pulse { from {opacity:.6} to {opacity:1} }
 
-/* ── HP 栏（每个区独立） ── */
-.section-hpbar {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  font-size: 0.8rem;
-  flex-shrink: 0;
-}
-.ai-hpbar   { background: rgba(0,0,50,0.5); }
-.player-hpbar { background: rgba(50,0,0,0.5); }
-.hpbar-label { color: #aaa; font-size: 0.7rem; margin-right: 2px; }
-.ai-label { color: #7cb8e0; }
-.hpbar-score { margin-left: auto; color: #ffd700; font-size: 0.72rem; }
-.hp { font-size: 0.8rem; }
-.hp.on  { color: #e53935; }
-.hp.off { color: #444; }
-
 /* ── 战场区（上下两半） ── */
 .section {
   display: flex;
@@ -320,9 +305,9 @@ function onDrop(r, c) {
 }
 
 /* 三种格子颜色 */
-.cell-path     { background: #a8c4a0; }   /* 浅绿：路线 */
-.cell-unlocked { background: #f0ece0; }   /* 白：已解锁放兵区 */
-.cell-locked   { background: #6a8c68; cursor: pointer; }  /* 深绿：锁定放兵区 */
+.cell-path     { background: #a8c4a0; }
+.cell-unlocked { background: #f0ece0; }
+.cell-locked   { background: #6a8c68; cursor: pointer; }
 .cell-dragover { outline: 2px solid #ffd700; }
 
 .lock-plus {
@@ -330,30 +315,37 @@ function onDrop(r, c) {
   font-size: 0.9rem;
 }
 
-/* ── 营 / 蔣 路线格图标 ── */
-.path-icon {
+/* ── 蔣格（路线格内，带HP） ── */
+.jiang-cell {
   width: 100%;
   height: 100%;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 1px;
 }
-.jiang-icon { background: rgba(0,0,0,0.15); }
-.ying-icon  { background: rgba(0,0,0,0.08); }
+.jiang-hp-row {
+  display: flex;
+  gap: 1px;
+  justify-content: center;
+}
+.jhp {
+  font-size: clamp(0.5rem, 1.8vw, 0.75rem);
+  line-height: 1;
+}
+.jhp.on  { color: #e53935; }
+.jhp.off { color: rgba(0,0,0,0.25); }
 
 .jiang-char {
-  font-size: clamp(1rem, 4vw, 2rem);
+  font-size: clamp(1.1rem, 4.5vw, 2.2rem);
   font-weight: bold;
   color: #ffd700;
-  text-shadow: 0 0 6px rgba(255,215,0,0.7);
-}
-.ying-char {
-  font-size: clamp(0.9rem, 3.5vw, 1.8rem);
-  font-weight: bold;
-  color: #ccc;
+  text-shadow: 0 0 8px rgba(255,215,0,0.8);
+  line-height: 1;
 }
 
-.jiang-icon.damaged .jiang-char {
+.jiang-cell.damaged .jiang-char {
   color: #ff5722;
   animation: shake 0.3s;
 }
@@ -365,15 +357,15 @@ function onDrop(r, c) {
 
 /* ── 棋盘内单位 ── */
 .unit {
-  width: 86%;
-  height: 86%;
+  width: 88%;
+  height: 88%;
   display: flex;
   align-items: center;
   justify-content: center;
   background: #f5f0e0;
   border: 1.5px solid #bbb;
   border-radius: 3px;
-  font-size: clamp(0.7rem, 2vw, 1rem);
+  font-size: clamp(0.65rem, 2.2vw, 1rem);
   font-weight: bold;
   color: #111;
   cursor: pointer;
@@ -394,7 +386,7 @@ function onDrop(r, c) {
 .lv {
   position: absolute;
   top: 1px; right: 2px;
-  font-size: 0.45rem; color: #888; font-weight: normal;
+  font-size: 0.42rem; color: #888; font-weight: normal;
 }
 
 /* ── 敌军层 ── */
@@ -440,16 +432,59 @@ function onDrop(r, c) {
   flex-shrink: 0;
 }
 
-/* ── 手牌区 ── */
-.hand-bar {
+/* ══ 底部操作区 ══ */
+.bottom-ui {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 8px;
-  background: rgba(0,0,0,0.65);
+  flex-direction: column;
+  background: rgba(0,0,0,0.7);
   flex-shrink: 0;
+  padding: 5px 6px 6px;
+  gap: 4px;
 }
 
+/* 手牌行 */
+.hand-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* 侧边圆形图标（营 / 铲子） */
+.side-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  cursor: pointer;
+  position: relative;
+}
+.ying-icon {
+  background: radial-gradient(circle at 40% 35%, #c0392b, #7b241c);
+  border: 2px solid #e74c3c;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+}
+.shovel-icon {
+  background: radial-gradient(circle at 40% 35%, #d4ac0d, #9a7a00);
+  border: 2px solid #f1c40f;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+}
+.side-icon-char {
+  font-size: 1.3rem;
+  font-weight: bold;
+  color: #fff;
+  line-height: 1;
+}
+.side-icon-sub {
+  font-size: 0.55rem;
+  color: rgba(255,255,255,0.85);
+  line-height: 1;
+}
+
+/* 手牌 */
 .hand-cards {
   display: flex;
   flex: 1;
@@ -458,8 +493,8 @@ function onDrop(r, c) {
 
 .card {
   flex: 1;
-  aspect-ratio: 0.72;
-  background: rgba(255,255,255,0.1);
+  aspect-ratio: 0.75;
+  background: rgba(255,255,255,0.08);
   border: 1.5px solid rgba(255,255,255,0.2);
   border-radius: 5px;
   display: flex;
@@ -467,37 +502,42 @@ function onDrop(r, c) {
   justify-content: center;
   cursor: grab;
   position: relative;
-  min-height: 42px;
+  min-height: 46px;
 }
-.card.selected { border-color: #ffd700; background: rgba(255,215,0,0.15); }
-.card:not(.empty):hover { border-color: rgba(255,255,255,0.5); }
+.card.selected { border-color: #ffd700; background: rgba(255,215,0,0.18); }
+.card:not(.empty):hover { border-color: rgba(255,255,255,0.45); }
 
-.card-char { font-size: 1.15rem; font-weight: bold; }
+.card-char { font-size: 1.2rem; font-weight: bold; }
 .card-lv {
   position: absolute;
   top: 2px; right: 4px;
   font-size: 0.45rem; color: #aaa;
 }
 
-/* 征兵按钮 */
+/* 征兵按钮行 */
+.recruit-row {
+  display: flex;
+  justify-content: center;
+}
+
 .recruit-btn {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  padding: 6px 10px;
+  gap: 6px;
+  padding: 5px 24px;
   background: linear-gradient(135deg, #6b3010, #3d1a04);
   border: 2px solid #c8960c;
-  border-radius: 6px;
+  border-radius: 20px;
   color: white;
   cursor: pointer;
   font-family: inherit;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   font-weight: bold;
-  flex-shrink: 0;
-  min-width: 52px;
+  min-width: 130px;
+  justify-content: center;
 }
 .recruit-btn.disabled { opacity: 0.4; cursor: not-allowed; }
-.cost { font-size: 0.7rem; color: #ffd700; }
+.cost { font-size: 0.8rem; color: #ffd700; }
 
 /* 弹窗 */
 .popup-mask {
