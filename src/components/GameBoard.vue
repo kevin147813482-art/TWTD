@@ -30,6 +30,16 @@
                 </div>
                 <span class="jiang-char">蔣</span>
               </div>
+              <!-- 营（AI: [0,7]）出兵口装饰 -->
+              <div v-else-if="ri === AI_YING_CELL[0] && ci === AI_YING_CELL[1]"
+                class="spawn-gate ai-gate">
+                <div class="gate-clouds">
+                  <span class="cloud c1">☁</span>
+                  <span class="cloud c2">☁</span>
+                  <span class="cloud c3">☁</span>
+                </div>
+                <div class="gate-arch"></div>
+              </div>
               <!-- 单位 -->
               <div v-else-if="cell.unit" class="unit"
                 :class="[`ut-${cell.unit.type}`, { atk: cell.unit.attacking }]">
@@ -82,6 +92,16 @@
                     :class="['jhp', i <= store.playerJiangHp ? 'on' : 'off']">♥</span>
                 </div>
                 <span class="jiang-char">蔣</span>
+              </div>
+              <!-- 营（玩家: [4,0]）出兵口装饰 -->
+              <div v-else-if="ri === PLAYER_YING_CELL[0] && ci === PLAYER_YING_CELL[1]"
+                class="spawn-gate player-gate">
+                <div class="gate-arch"></div>
+                <div class="gate-clouds">
+                  <span class="cloud c1">☁</span>
+                  <span class="cloud c2">☁</span>
+                  <span class="cloud c3">☁</span>
+                </div>
               </div>
               <!-- 单位 -->
               <div v-else-if="cell.unit" class="unit"
@@ -313,6 +333,62 @@ function onGetShovel() {
 .lock-plus {
   color: rgba(255,255,255,0.3);
   font-size: 0.9rem;
+}
+
+/* ── 出兵口装饰（营格） ── */
+.spawn-gate {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.gate-arch {
+  width: 70%;
+  height: 45%;
+  border-radius: 50% 50% 0 0;
+  background: rgba(30, 20, 10, 0.75);
+  border: 2px solid rgba(160, 120, 60, 0.8);
+  border-bottom: none;
+  position: relative;
+  z-index: 1;
+}
+
+.ai-gate .gate-arch {
+  border-radius: 0 0 50% 50%;
+  border-top: none;
+  border-bottom: 2px solid rgba(160, 120, 60, 0.8);
+}
+
+.gate-clouds {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.cloud {
+  position: absolute;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: clamp(0.6rem, 2.2vw, 1.1rem);
+  animation: cloudDrift 3s ease-in-out infinite;
+  filter: drop-shadow(0 0 2px rgba(200,200,255,0.5));
+}
+
+.player-gate .c1 { bottom: 55%; left: 5%;  animation-delay: 0s;    animation-duration: 2.8s; }
+.player-gate .c2 { bottom: 60%; left: 30%; animation-delay: 0.9s;  animation-duration: 3.2s; }
+.player-gate .c3 { bottom: 52%; left: 55%; animation-delay: 0.4s;  animation-duration: 2.5s; }
+
+.ai-gate .c1 { top: 55%; left: 5%;  animation-delay: 0s;    animation-duration: 2.8s; }
+.ai-gate .c2 { top: 60%; left: 30%; animation-delay: 0.9s;  animation-duration: 3.2s; }
+.ai-gate .c3 { top: 52%; left: 55%; animation-delay: 0.4s;  animation-duration: 2.5s; }
+
+@keyframes cloudDrift {
+  0%, 100% { transform: translateX(0) translateY(0); opacity: 0.7; }
+  50%       { transform: translateX(3px) translateY(-2px); opacity: 1; }
 }
 
 /* ── 蔣格（路线格内，带HP） ── */
