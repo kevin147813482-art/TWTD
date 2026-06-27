@@ -16,14 +16,15 @@ function isPathCell(r, c, isAI) {
 
 function createBoard(isAI = false) {
   const board = []
-  const { BOARD_ROWS, BOARD_COLS, INITIAL_UNLOCKED } = GAME_CONFIG
+  const { BOARD_ROWS, BOARD_COLS, INITIAL_UNLOCKED, AI_INITIAL_UNLOCKED } = GAME_CONFIG
+  const unlockList = isAI ? AI_INITIAL_UNLOCKED : INITIAL_UNLOCKED
   for (let r = 0; r < BOARD_ROWS; r++) {
     board.push([])
     for (let c = 0; c < BOARD_COLS; c++) {
       if (isPathCell(r, c, isAI)) {
         board[r].push({ kind: 'path', unit: null })
       } else {
-        const unlocked = INITIAL_UNLOCKED.some(([ur, uc]) => ur === r && uc === c)
+        const unlocked = unlockList.some(([ur, uc]) => ur === r && uc === c)
         board[r].push({ kind: unlocked ? 'unlocked' : 'locked', unit: null })
       }
     }
