@@ -3,9 +3,15 @@ import { GAME_CONFIG, BASIC_UNITS, GENERALS, ENEMY_TYPES } from '../game/config.
 
 // 根据路线定义哪些格子是path（路线格）
 function isPathCell(r, c, isAI) {
-  const COLS = GAME_CONFIG.BOARD_COLS   // 8
-  // 两区路线相同：左列 + 顶行 + 右列（水平镜像，路线格一致）
-  return c === 0 || r === 0 || c === COLS - 1
+  const ROWS = GAME_CONFIG.BOARD_ROWS
+  const COLS = GAME_CONFIG.BOARD_COLS
+  if (isAI) {
+    // AI路线: 右列 + 底行 + 左列
+    return c === COLS - 1 || r === ROWS - 1 || c === 0
+  } else {
+    // 玩家路线: 左列 + 顶行 + 右列
+    return c === 0 || r === 0 || c === COLS - 1
+  }
 }
 
 function createBoard(isAI = false) {
@@ -51,8 +57,8 @@ function getRecruitCost(times) {
 // 路线第一格=营，最后一格=蔣
 export const PLAYER_YING_CELL  = GAME_CONFIG.PLAYER_PATH[0]                              // [4,0]
 export const PLAYER_JIANG_CELL = GAME_CONFIG.PLAYER_PATH[GAME_CONFIG.PLAYER_PATH.length - 1] // [4,7]
-export const AI_YING_CELL      = GAME_CONFIG.AI_PATH[0]                                  // [4,7]
-export const AI_JIANG_CELL     = GAME_CONFIG.AI_PATH[GAME_CONFIG.AI_PATH.length - 1]     // [4,0]
+export const AI_YING_CELL      = GAME_CONFIG.AI_PATH[0]                                  // [0,7]
+export const AI_JIANG_CELL     = GAME_CONFIG.AI_PATH[GAME_CONFIG.AI_PATH.length - 1]     // [0,0]
 
 export const gameStore = reactive({
   phase: 'home',
