@@ -342,13 +342,13 @@ function onDrop(r, c) {
 .ying-icon  { background: rgba(0,0,0,0.08); }
 
 .jiang-char {
-  font-size: clamp(0.7rem, 2.5vw, 1.4rem);
+  font-size: clamp(1rem, 4vw, 2rem);
   font-weight: bold;
   color: #ffd700;
   text-shadow: 0 0 6px rgba(255,215,0,0.7);
 }
 .ying-char {
-  font-size: clamp(0.6rem, 2vw, 1.1rem);
+  font-size: clamp(0.9rem, 3.5vw, 1.8rem);
   font-weight: bold;
   color: #ccc;
 }
