@@ -64,12 +64,9 @@ function canAttack(unit, enemy, isAI) {
   if (eCol === COLS - 1) {
     return (COLS-1-unit.col) <= range && Math.abs(eRow - unit.row) < tol
   }
-  // 路线行（玩家顶行row=0，AI底行row=ROWS-1）
-  if (!isAI && eRow === 0) {
+  // 路线行（两区都是顶行row=0，水平镜像）
+  if (eRow === 0) {
     return unit.row <= range && Math.abs(eCol - unit.col) < tol
-  }
-  if (isAI && eRow === ROWS-1) {
-    return (ROWS-1-unit.row) <= range && Math.abs(eCol - unit.col) < tol
   }
   return false
 }
