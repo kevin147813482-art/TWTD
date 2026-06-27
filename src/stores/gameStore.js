@@ -1,21 +1,26 @@
 import { reactive } from 'vue'
 import { GAME_CONFIG, BASIC_UNITS, GENERALS, ENEMY_TYPES } from '../game/config.js'
 
-// 创建棋盘：含路线格(path)、锁定格(locked)、解锁格(unlocked)
+// 根据路线定义哪些格子是path（路线格）
+function isPathCell(r, c, isAI) {
+  const ROWS = GAME_CONFIG.BOARD_ROWS   // 5
+  const COLS = GAME_CONFIG.BOARD_COLS   // 8
+  if (isAI) {
+    // AI路线: 右列(col=COLS-1) + 底行(row=ROWS-1) + 左列(col=0)
+    return c === COLS - 1 || r === ROWS - 1 || c === 0
+  } else {
+    // 玩家路线: 左列(col=0) + 顶行(row=0) + 右列(col=COLS-1)
+    return c === 0 || r === 0 || c === COLS - 1
+  }
+}
+
 function createBoard(isAI = false) {
   const board = []
   const { BOARD_ROWS, BOARD_COLS, INITIAL_UNLOCKED } = GAME_CONFIG
-
   for (let r = 0; r < BOARD_ROWS; r++) {
     board.push([])
     for (let c = 0; c < BOARD_COLS; c++) {
-      const isLeftPath  = c === 0
-      const isRightPath = c === BOARD_COLS - 1
-      const isTopPath   = !isAI && r === 0
-      const isBottomPath = isAI && r === BOARD_ROWS - 1
-      const isPath = isLeftPath || isRightPath || isTopPath || isBottomPath
-
-      if (isPath) {
+      if (isPathCell(r, c, isAI)) {
         board[r].push({ kind: 'path', unit: null })
       } else {
         const unlocked = INITIAL_UNLOCKED.some(([ur, uc]) => ur === r && uc === c)
@@ -26,7 +31,7 @@ function createBoard(isAI = false) {
   return board
 }
 
-function randomHandCard(wave) {
+export function randomHandCard(wave) {
   const generalChance = Math.min(0.05 + wave * 0.01, 0.25)
   const shovelChance = 0.08
   const r = Math.random()
@@ -44,11 +49,18 @@ function randomHandCard(wave) {
   }
 }
 
-export { randomHandCard }
-
 function getRecruitCost(times) {
   return GAME_CONFIG.RECRUIT_BASE_COST + times * GAME_CONFIG.RECRUIT_COST_INCREMENT
 }
+
+// 玩家蔣的位置（路线最后一格）
+export const PLAYER_JIANG_CELL = GAME_CONFIG.PLAYER_PATH[GAME_CONFIG.PLAYER_PATH.length - 1]
+// AI蔣的位置（路线最后一格）
+export const AI_JIANG_CELL = GAME_CONFIG.AI_PATH[GAME_CONFIG.AI_PATH.length - 1]
+// 玩家营的位置（路线第一格）
+export const PLAYER_YING_CELL = GAME_CONFIG.PLAYER_PATH[0]
+// AI营的位置
+export const AI_YING_CELL = GAME_CONFIG.AI_PATH[0]
 
 export const gameStore = reactive({
   phase: 'home',
@@ -56,7 +68,6 @@ export const gameStore = reactive({
   bossWarning: false,
   enemyIdCounter: 0,
 
-  // 玩家
   playerBoard: createBoard(false),
   playerJiangHp: GAME_CONFIG.JIANG_INITIAL_HP,
   playerJiangMaxHp: GAME_CONFIG.JIANG_INITIAL_HP,
@@ -66,7 +77,6 @@ export const gameStore = reactive({
   playerEnemies: [],
   playerScore: 0,
 
-  // AI
   aiBoard: createBoard(true),
   aiJiangHp: GAME_CONFIG.JIANG_INITIAL_HP,
   aiJiangMaxHp: GAME_CONFIG.JIANG_INITIAL_HP,
@@ -76,7 +86,7 @@ export const gameStore = reactive({
   aiScore: 0,
 
   get playerRecruitCost() { return getRecruitCost(this.playerRecruitTimes) },
-  get canPlayerRecruit() { return this.playerFood >= this.playerRecruitCost },
+  get canPlayerRecruit()  { return this.playerFood >= this.playerRecruitCost },
 
   startGame() {
     this.phase = 'playing'
@@ -116,8 +126,7 @@ export const gameStore = reactive({
     if (!card || card.type === 'shovel') return false
     cell.unit = {
       ...card, id: Date.now() + Math.random(),
-      level: card.level || 1, exp: 0,
-      row, col, attacking: false, stunned: false,
+      level: card.level || 1, row, col, attacking: false, stunned: false,
     }
     this.playerHand[handIndex] = null
     this.checkMerge(this.playerBoard, row, col)
@@ -137,9 +146,8 @@ export const gameStore = reactive({
   checkMerge(board, row, col) {
     const cell = board[row][col]
     if (!cell.unit) return
-    const dirs = [[-1,0],[1,0],[0,-1],[0,1]]
-    for (const [dr,dc] of dirs) {
-      const nr = row+dr, nc = col+dc
+    for (const [dr,dc] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+      const nr=row+dr, nc=col+dc
       if (nr<0||nr>=GAME_CONFIG.BOARD_ROWS||nc<0||nc>=GAME_CONFIG.BOARD_COLS) continue
       const nb = board[nr][nc]
       if (!nb.unit) continue
@@ -153,7 +161,7 @@ export const gameStore = reactive({
           cell.unit.generalKey===nb.unit.generalKey && cell.unit.char!==nb.unit.char) {
         const g = GENERALS[cell.unit.generalKey]
         cell.unit = { type:'general', key:cell.unit.generalKey, ...g,
-          id:Date.now(), level:1, exp:0, row, col, attacking:false, stunned:false }
+          id:Date.now(), level:1, row, col, attacking:false, stunned:false }
         nb.unit = null; return
       }
     }
@@ -168,22 +176,20 @@ export const gameStore = reactive({
       const i = list.findIndex(e=>e.id===enemyId)
       if (i!==-1) list.splice(i,1)
       if (side==='player') {
-        this.playerFood = Math.min(this.playerFood + GAME_CONFIG.FOOD_PER_KILL, 99)
+        this.playerFood = Math.min(this.playerFood+GAME_CONFIG.FOOD_PER_KILL, 99)
         this.playerScore++
-      } else {
-        this.aiScore++
-      }
+      } else { this.aiScore++ }
     }
   },
 
   damagePlayerJiang() {
-    this.playerFood = Math.min(this.playerFood + GAME_CONFIG.FOOD_ON_HIT, 99)
+    this.playerFood = Math.min(this.playerFood+GAME_CONFIG.FOOD_ON_HIT, 99)
     this.playerJiangHp--
     if (this.playerJiangHp <= 0) this.phase = 'defeat'
   },
 
   damageAIJiang() {
-    this.aiFood = Math.min(this.aiFood + GAME_CONFIG.FOOD_ON_HIT, 99)
+    this.aiFood = Math.min(this.aiFood+GAME_CONFIG.FOOD_ON_HIT, 99)
     this.aiJiangHp--
     if (this.aiJiangHp <= 0) this.phase = 'victory'
   },
@@ -194,11 +200,11 @@ export const gameStore = reactive({
     const list = side==='player' ? this.playerEnemies : this.aiEnemies
     list.push({
       id: ++this.enemyIdCounter,
-      key, ...type, hp: type.hp, maxHp: type.hp,
+      key, ...type, hp:type.hp, maxHp:type.hp,
       pathProgress: 0, stunned: false, isBoss: false,
     })
   },
 
   nextWave() { this.wave++ },
-  victory() { this.phase = 'victory' },
+  victory()  { this.phase = 'victory' },
 })

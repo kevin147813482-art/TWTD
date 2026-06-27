@@ -11,14 +11,12 @@
 
     <!-- ══ AI 区（上半） ══ -->
     <div class="section ai-section">
-      <!-- 蔣（左侧，AI） -->
-      <div class="side-panel left-panel">
-        <div class="jiang-char">蔣</div>
-        <div class="hp-list">
-          <span v-for="i in store.aiJiangMaxHp" :key="i"
-            :class="['hp', i <= store.aiJiangHp ? 'on' : 'off']">♥</span>
-        </div>
-        <div class="panel-label">AI</div>
+      <!-- AI HP 栏 -->
+      <div class="section-hpbar ai-hpbar">
+        <span class="hpbar-label ai-label">AI</span>
+        <span v-for="i in store.aiJiangMaxHp" :key="i"
+          :class="['hp', i <= store.aiJiangHp ? 'on' : 'off']">♥</span>
+        <span class="hpbar-score">擊{{ store.aiScore }}</span>
       </div>
 
       <!-- 棋盘（AI） -->
@@ -32,29 +30,38 @@
                 'cell-unlocked': cell.kind === 'unlocked',
                 'cell-locked':   cell.kind === 'locked',
               }">
-              <div v-if="cell.unit" class="unit"
+              <!-- 蔣（AI: [0,0]） -->
+              <div v-if="ri === AI_JIANG_CELL[0] && ci === AI_JIANG_CELL[1]"
+                class="path-icon jiang-icon">
+                <span class="jiang-char">蔣</span>
+              </div>
+              <!-- 营（AI: [0,7]） -->
+              <div v-else-if="ri === AI_YING_CELL[0] && ci === AI_YING_CELL[1]"
+                class="path-icon ying-icon">
+                <span class="ying-char">營</span>
+              </div>
+              <!-- 单位 -->
+              <div v-else-if="cell.unit" class="unit"
                 :class="[`ut-${cell.unit.type}`, { atk: cell.unit.attacking }]">
                 {{ cell.unit.type === 'general_char' ? cell.unit.char : cell.unit.key }}
                 <span v-if="cell.unit.level > 1" class="lv">{{ cell.unit.level }}</span>
               </div>
+              <div v-else-if="cell.kind === 'locked'" class="lock-plus">+</div>
             </div>
           </template>
         </div>
-        <!-- AI敌军 -->
+        <!-- AI 敌军 -->
         <div class="enemy-layer">
           <div v-for="e in store.aiEnemies" :key="e.id"
             class="enemy"
             :class="{ boss: e.isBoss }"
             :style="{ ...getEnemyStyle(e.pathProgress, true), color: ECOLOR[e.key] }">
             {{ e.key }}
+            <div v-if="e.isBoss" class="ehp">
+              <div class="ehpf" :style="{ width: (e.hp/e.maxHp*100)+'%' }"></div>
+            </div>
           </div>
         </div>
-      </div>
-
-      <!-- 营（右侧，AI） -->
-      <div class="side-panel right-panel">
-        <div class="ying-char">營</div>
-        <div class="panel-label ai-kill">{{ store.aiScore }}</div>
       </div>
     </div>
 
@@ -63,12 +70,6 @@
 
     <!-- ══ 玩家区（下半） ══ -->
     <div class="section player-section">
-      <!-- 营（左侧，玩家） -->
-      <div class="side-panel left-panel">
-        <div class="ying-char">營</div>
-        <div class="panel-label">{{ store.playerScore }}</div>
-      </div>
-
       <!-- 棋盘（玩家） -->
       <div class="grid-wrap">
         <div class="board-grid">
@@ -85,7 +86,18 @@
               @dragleave="dragOver = null"
               @drop="onDrop(ri, ci)"
               @click="onCellClick(ri, ci)">
-              <div v-if="cell.unit" class="unit"
+              <!-- 蔣（玩家: [4,7]） -->
+              <div v-if="ri === PLAYER_JIANG_CELL[0] && ci === PLAYER_JIANG_CELL[1]"
+                class="path-icon jiang-icon" :class="{ damaged: jiangFlash }">
+                <span class="jiang-char">蔣</span>
+              </div>
+              <!-- 营（玩家: [4,0]） -->
+              <div v-else-if="ri === PLAYER_YING_CELL[0] && ci === PLAYER_YING_CELL[1]"
+                class="path-icon ying-icon">
+                <span class="ying-char">營</span>
+              </div>
+              <!-- 单位 -->
+              <div v-else-if="cell.unit" class="unit"
                 :class="[`ut-${cell.unit.type}`, { atk: cell.unit.attacking }]"
                 @click.stop="infoUnit = cell.unit">
                 {{ cell.unit.type === 'general_char' ? cell.unit.char : cell.unit.key }}
@@ -109,13 +121,11 @@
         </div>
       </div>
 
-      <!-- 蔣（右侧，玩家） -->
-      <div class="side-panel right-panel" :class="{ damaged: jiangFlash }">
-        <div class="jiang-char">蔣</div>
-        <div class="hp-list">
-          <span v-for="i in store.playerJiangMaxHp" :key="i"
-            :class="['hp', i <= store.playerJiangHp ? 'on' : 'off']">♥</span>
-        </div>
+      <!-- 玩家 HP 栏 -->
+      <div class="section-hpbar player-hpbar">
+        <span class="hpbar-label">我</span>
+        <span v-for="i in store.playerJiangMaxHp" :key="i"
+          :class="['hp', i <= store.playerJiangHp ? 'on' : 'off']">♥</span>
       </div>
     </div>
 
@@ -162,17 +172,17 @@
 
 <script setup>
 import { ref, watch } from 'vue'
-import { gameStore as store } from '../stores/gameStore.js'
+import { gameStore as store, PLAYER_JIANG_CELL, AI_JIANG_CELL, PLAYER_YING_CELL, AI_YING_CELL } from '../stores/gameStore.js'
 import { getEnemyStyle } from '../game/engine.js'
 import { BASIC_UNITS, GENERALS, GAME_CONFIG } from '../game/config.js'
 
 const ECOLOR = { 匪:'#555', 共:'#1a237e', 赤:'#c62828', 寇:'#4e342e' }
 
-const dragging    = ref(null)
-const dragOver    = ref(null)
+const dragging     = ref(null)
+const dragOver     = ref(null)
 const selectedCard = ref(null)
-const infoUnit    = ref(null)
-const jiangFlash  = ref(false)
+const infoUnit     = ref(null)
+const jiangFlash   = ref(false)
 
 watch(() => store.playerJiangHp, () => {
   jiangFlash.value = true
@@ -259,59 +269,37 @@ function onDrop(r, c) {
 .boss-tag { color: #ff4444; font-weight: bold; animation: pulse 0.4s infinite alternate; }
 @keyframes pulse { from {opacity:.6} to {opacity:1} }
 
+/* ── HP 栏（每个区独立） ── */
+.section-hpbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+.ai-hpbar   { background: rgba(0,0,50,0.5); }
+.player-hpbar { background: rgba(50,0,0,0.5); }
+.hpbar-label { color: #aaa; font-size: 0.7rem; margin-right: 2px; }
+.ai-label { color: #7cb8e0; }
+.hpbar-score { margin-left: auto; color: #ffd700; font-size: 0.72rem; }
+.hp { font-size: 0.8rem; }
+.hp.on  { color: #e53935; }
+.hp.off { color: #444; }
+
 /* ── 战场区（上下两半） ── */
 .section {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
-}
-
-/* ── 侧栏（蔣 / 营） ── */
-.side-panel {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  flex-shrink: 0;
-  background: rgba(0,0,0,0.4);
-  padding: 4px 2px;
-  gap: 3px;
-}
-.jiang-char {
-  font-size: 1.6rem;
-  font-weight: bold;
-  color: #ffd700;
-  text-shadow: 0 0 6px rgba(255,215,0,0.6);
-}
-.ying-char {
-  font-size: 1.1rem;
-  font-weight: bold;
-  color: #bbb;
-}
-.hp-list { display: flex; flex-direction: column; gap: 1px; }
-.hp { font-size: 0.75rem; }
-.hp.on  { color: #e53935; }
-.hp.off { color: #444; }
-.panel-label { font-size: 0.6rem; color: #aaa; }
-.ai-kill { color: #ffd700; }
-
-.right-panel.damaged .jiang-char {
-  color: #ff5722;
-  animation: shake 0.3s;
-}
-@keyframes shake {
-  0%,100% { transform: translateX(0) }
-  25%      { transform: translateX(-3px) }
-  75%      { transform: translateX(3px) }
 }
 
 /* ── 棋盘容器 ── */
 .grid-wrap {
   flex: 1;
   position: relative;
-  min-width: 0;
+  min-height: 0;
 }
 
 /* ── 棋盘格子 ── */
@@ -342,6 +330,39 @@ function onDrop(r, c) {
   font-size: 0.9rem;
 }
 
+/* ── 营 / 蔣 路线格图标 ── */
+.path-icon {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.jiang-icon { background: rgba(0,0,0,0.15); }
+.ying-icon  { background: rgba(0,0,0,0.08); }
+
+.jiang-char {
+  font-size: clamp(0.7rem, 2.5vw, 1.4rem);
+  font-weight: bold;
+  color: #ffd700;
+  text-shadow: 0 0 6px rgba(255,215,0,0.7);
+}
+.ying-char {
+  font-size: clamp(0.6rem, 2vw, 1.1rem);
+  font-weight: bold;
+  color: #ccc;
+}
+
+.jiang-icon.damaged .jiang-char {
+  color: #ff5722;
+  animation: shake 0.3s;
+}
+@keyframes shake {
+  0%,100% { transform: translateX(0) }
+  25%      { transform: translateX(-3px) }
+  75%      { transform: translateX(3px) }
+}
+
 /* ── 棋盘内单位 ── */
 .unit {
   width: 86%;
@@ -352,7 +373,7 @@ function onDrop(r, c) {
   background: #f5f0e0;
   border: 1.5px solid #bbb;
   border-radius: 3px;
-  font-size: 1rem;
+  font-size: clamp(0.7rem, 2vw, 1rem);
   font-weight: bold;
   color: #111;
   cursor: pointer;
