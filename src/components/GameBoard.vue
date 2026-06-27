@@ -570,8 +570,8 @@ function onGetShovel() {
 .card {
   flex: 1;
   aspect-ratio: 0.75;
-  background: rgba(255,255,255,0.08);
-  border: 1.5px solid rgba(255,255,255,0.2);
+  background: #f5f0e0;
+  border: 1.5px solid #bbb;
   border-radius: 5px;
   display: flex;
   align-items: center;
@@ -580,8 +580,9 @@ function onGetShovel() {
   position: relative;
   min-height: 46px;
 }
-.card.selected { border-color: #ffd700; background: rgba(255,215,0,0.18); }
-.card:not(.empty):hover { border-color: rgba(255,255,255,0.45); }
+.card.empty { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.15); }
+.card.selected { border-color: #ffd700; background: #fff8d0; }
+.card:not(.empty):hover { border-color: #999; }
 
 .card-char { font-size: 1.2rem; font-weight: bold; }
 .card-lv {
