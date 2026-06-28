@@ -87,6 +87,7 @@
 | 2026-06-28 | 建立素材替換架構：assets.js 注冊表 + UnitSprite + EnemySprite 組件；字體改綁 --cell | `assets.js`, `UnitSprite.vue`, `EnemySprite.vue`, `GameBoard.vue` | 預留素材替換入口 |
 | 2026-06-28 | P0 手牌飛入動畫：從右側逐張飛入，右邊卡先到（index 4→0，55ms 間距） | `gameStore.js`, `GameBoard.vue` | 對齊參考遊戲手感 |
 | 2026-06-28 | P1 鏟子功能：⛏+1 按鈕加鏟子到手牌，持鏟時鎖定格橘色脈動高亮 | `GameBoard.vue` | openCell 接線完成 |
+| 2026-06-28 | **Flutter 移植：修復 10 個核心 Bug，對齊 Vue 版玩法** | `tower_defense_game.dart`, `game_notifier.dart`, `config.dart`, `game_screen.dart` | 攻擊目標修正/投射物方向/deploy-swap/move-swap/蔣受擊+10糧食/波次計數/速度校正/prep→playing時序/AI在prep佈防/蔣不重複渲染 |
 
 ---
 
