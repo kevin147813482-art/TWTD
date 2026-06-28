@@ -300,8 +300,9 @@ function onCellClick(r, c) {
 }
 
 function onBoardDragStart(r, c) {
-  boardDrag.value = [r, c]
   dragging.value = null
+  // 延迟一帧，让拖拽幽灵图先生成（无虚线），再对原元素应用虚线样式
+  setTimeout(() => { boardDrag.value = [r, c] }, 0)
 }
 
 function onDrop(r, c) {
@@ -527,7 +528,7 @@ function onGetShovel() {
   transition: border-color 0.1s, transform 0.1s;
 }
 .unit.atk      { border-color: #ff5722; transform: scale(1.1); }
-.unit.dragging { opacity: 0.4; border: 2px dashed #aaa; }
+.unit.dragging { opacity: 0.35; border: 2px dashed #ffd700 !important; background: rgba(255,215,0,0.1); }
 .unit.atk::after {
   content: '';
   position: absolute;
