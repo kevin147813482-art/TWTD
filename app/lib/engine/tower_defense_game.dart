@@ -135,7 +135,7 @@ class TowerDefenseGame extends FlameGame {
     final phase = notifier.state.phase;
     if (phase == GamePhase.prep) {
       _updatePrep(dt);
-      _aiTick(dt * 1000); // AI 在 prep 階段也招募布防，與玩家起點平等
+      _aiTick(dt * 1000);
       return;
     }
     if (phase == GamePhase.paused || phase != GamePhase.playing) return;
@@ -148,7 +148,7 @@ class TowerDefenseGame extends FlameGame {
     _aiTick(dtMs);
   }
 
-  // 準備階段：蔣從营走到蔣位置（進度純存引擎，不走 Riverpod）
+  // 準備階段：蔣從营走到蔣位置
   void _updatePrep(double dt) {
     if (_prepDone) return;
     const speed = 2.5;
@@ -160,7 +160,6 @@ class TowerDefenseGame extends FlameGame {
     if (_playerJiangProgress >= kPlayerPath.length - 1 &&
         _aiJiangProgress >= kAiPath.length - 1) {
       _prepDone = true;
-      // setPhase 必須先執行，_spawnWave 才能通過 phase==playing 的檢查
       _postFrame(() {
         notifier.setPhase(GamePhase.playing);
         _spawnWave();
@@ -171,7 +170,6 @@ class TowerDefenseGame extends FlameGame {
   // ── 敵軍移動 ────────────────────────────────────────
 
   void _moveEnemies(double dtMs) {
-    // 速度係數 ×0.0008 對齊 Vue 版：Vue spd = delta * 0.0008
     const speedScale = 0.0008;
     for (final e in _playerEnemies) {
       if (e.markedDead) continue;
@@ -197,10 +195,8 @@ class TowerDefenseGame extends FlameGame {
 
   void _processAttacks(double dtMs) {
     final s = notifier.state;
-    // player 陣地防守 player 路線上的敵軍（殺敵 → 玩家得糧食 + 積分）
     _processSideAttacks(s.playerBoard, _playerEnemies, 'player', dtMs,
         isAiPath: false, onKill: () => notifier.onPlayerEnemyKilled());
-    // AI 陣地防守 AI 路線上的敵軍
     _processSideAttacks(s.aiBoard, _aiEnemies, 'ai', dtMs,
         isAiPath: true, onKill: () => notifier.onAiEnemyKilled());
   }
@@ -280,13 +276,10 @@ class TowerDefenseGame extends FlameGame {
     final durationMs = ProjectileState.durations[kind] ?? 300;
     final targetCell = getPathCell(targetProgress, path);
 
-    // 攻擊方向：同側（player 陣地的塔攻擊 player 路線上的敵軍，ai 同理）
     final sourceIsAiBoard = side == 'ai';
-    final targetIsAiBoard = sourceIsAiBoard;
-
     final sourcePos = _cellCenter(ur, uc, isAiBoard: sourceIsAiBoard);
     final targetPos = _cellCenter(
-        targetCell[0], targetCell[1], isAiBoard: targetIsAiBoard);
+        targetCell[0], targetCell[1], isAiBoard: sourceIsAiBoard);
 
     _projectiles.add(_Projectile(
       id: _uid('p'), kind: kind, side: side,
@@ -391,7 +384,6 @@ class TowerDefenseGame extends FlameGame {
     final s = notifier.state;
     final cost = getRecruitCost(s.aiRecruitTimes);
     if (s.aiFood >= cost) {
-      // 延後執行，避免在 update() 中修改 provider
       _postFrame(() {
         notifier.aiRecruit();
         _aiDeploy();
@@ -426,10 +418,14 @@ class TowerDefenseGame extends FlameGame {
 
     _renderBoard(canvas, s.aiBoard,
         isAi: true,
-        jiangProgress: inPrep ? _aiJiangProgress : kAiPath.length.toDouble());
+        jiangProgress: inPrep ? _aiJiangProgress : kAiPath.length.toDouble(),
+        jiangHp: s.aiJiangHp, jiangMaxHp: s.aiJiangMaxHp,
+        danger: s.aiDanger);
     _renderBoard(canvas, s.playerBoard,
         isAi: false,
-        jiangProgress: inPrep ? _playerJiangProgress : kPlayerPath.length.toDouble());
+        jiangProgress: inPrep ? _playerJiangProgress : kPlayerPath.length.toDouble(),
+        jiangHp: s.playerJiangHp, jiangMaxHp: s.playerJiangMaxHp,
+        danger: s.playerDanger);
     _renderDivider(canvas);
     _renderEnemies(canvas, _aiEnemies,     isAiPath: true);
     _renderEnemies(canvas, _playerEnemies, isAiPath: false);
@@ -438,23 +434,28 @@ class TowerDefenseGame extends FlameGame {
 
   // ── Render helpers ───────────────────────────────────
 
-  void _renderBoard(Canvas canvas, List<List<Cell>> board,
-      {required bool isAi, required double jiangProgress}) {
+  void _renderBoard(Canvas canvas, List<List<Cell>> board, {
+    required bool isAi,
+    required double jiangProgress,
+    required int jiangHp,
+    required int jiangMaxHp,
+    bool danger = false,
+  }) {
     final boardY   = isAi ? _aiBoardY : _playerBoardY;
     final path     = isAi ? kAiPath   : kPlayerPath;
-    final isWalking = jiangProgress < path.length - 1; // prep 動畫進行中
+    final isWalking = jiangProgress < path.length - 1;
 
     for (int r = 0; r < kRows; r++) {
       for (int c = 0; c < kCols; c++) {
         final cell = board[r][c];
         final rect = _cellRect(r, c, boardY);
 
-        final color = switch (cell.kind) {
+        final bgColor = switch (cell.kind) {
           CellKind.path     => 0xFF8b7355,
           CellKind.unlocked => 0xFF2a3a2a,
           CellKind.locked   => 0xFF1a1a2a,
         };
-        canvas.drawRect(rect, Paint()..color = Color(color));
+        canvas.drawRect(rect, Paint()..color = Color(bgColor));
         canvas.drawRect(rect,
           Paint()
             ..color = const Color(0x1AFFFFFF)
@@ -462,53 +463,103 @@ class TowerDefenseGame extends FlameGame {
             ..strokeWidth = 0.5,
         );
 
-        // prep 動畫期間不繪製靜態蔣（walker 取代），避免重複顯示
-        _drawSpecialCellLabel(canvas, r, c, path, rect, hideJiang: isWalking);
-        if (cell.unit != null) _drawUnit(canvas, cell.unit!, rect);
+        if (cell.kind == CellKind.locked) {
+          // 鎖定格顯示 + 號提示
+          _drawChar(canvas, '+', rect,
+              color: const Color(0x33FFFFFF), fontSize: _cellSize * 0.35);
+        } else {
+          _drawSpecialCellLabel(canvas, r, c, path, rect,
+              jiangHp: jiangHp, jiangMaxHp: jiangMaxHp, hideJiang: isWalking);
+          if (cell.unit != null) _drawUnit(canvas, cell.unit!, rect);
+        }
       }
     }
 
-    // prep 動畫：蔣沿路線行走
+    // prep 動畫：蔣沿路線平滑行走（getPathPos 插值）
     if (isWalking) {
-      final pathCell = getPathCell(jiangProgress, path);
-      final jiangRect = _cellRect(pathCell[0], pathCell[1], boardY);
-      _drawChar(canvas, '蔣', jiangRect,
-          color: const Color(0xFFFFD700), fontSize: _cellSize * 0.5);
+      final pos = getPathPos(jiangProgress, path);
+      final rect = _cellRectF(pos.row, pos.col, boardY);
+      _drawHearts(canvas, rect, jiangHp, jiangMaxHp);
+      _drawChar(canvas, '蔣', rect,
+          color: const Color(0xFFFFD700), fontSize: _cellSize * 0.45,
+          offsetY: _cellSize * 0.08);
+    }
+
+    // 危險警告：右側顯示「危」
+    if (danger) {
+      final oy = boardY + (kRows / 2 - 0.6) * _cellSize;
+      final rect = Rect.fromLTWH(
+        _boardOffsetX + (kCols - 1) * _cellSize,
+        oy, _cellSize, _cellSize * 1.2,
+      );
+      _drawChar(canvas, '危', rect,
+          color: const Color(0xCCFF1744), fontSize: _cellSize * 0.6);
     }
   }
 
   void _drawSpecialCellLabel(Canvas canvas, int r, int c,
-      List<List<int>> path, Rect rect, {bool hideJiang = false}) {
+      List<List<int>> path, Rect rect,
+      {required int jiangHp, required int jiangMaxHp, bool hideJiang = false}) {
     final isYing  = path.first[0] == r && path.first[1] == c;
     final isJiang = path.last[0]  == r && path.last[1]  == c;
     if (isYing) {
-      _drawChar(canvas, '营', rect,
-          color: const Color(0x88FFFFFF), fontSize: _cellSize * 0.32);
+      _drawChar(canvas, '☁营', rect,
+          color: const Color(0x88FFFFFF), fontSize: _cellSize * 0.28);
     } else if (isJiang && !hideJiang) {
+      _drawHearts(canvas, rect, jiangHp, jiangMaxHp);
       _drawChar(canvas, '蔣', rect,
-          color: const Color(0xFFFFD700), fontSize: _cellSize * 0.5);
+          color: const Color(0xFFFFD700), fontSize: _cellSize * 0.45,
+          offsetY: _cellSize * 0.08);
     }
   }
 
   void _drawUnit(Canvas canvas, Unit unit, Rect rect) {
-    if (unit.attacking) {
-      canvas.drawRect(rect, Paint()..color = const Color(0x33FF4444));
-    }
+    final inset = rect.deflate(_cellSize * 0.06);
+
+    // 卡牌底色
+    final bg = (unit.type == 'general' || unit.type == 'general_char')
+        ? const Color(0xFF3a2a00)
+        : const Color(0xFFF0ECE0);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(inset, const Radius.circular(2)),
+      Paint()..color = bg,
+    );
+
+    // 卡牌邊框（攻擊時橘色）
+    final borderColor = unit.attacking
+        ? const Color(0xFFFF5722)
+        : (unit.type == 'general' || unit.type == 'general_char')
+            ? const Color(0xFFFFD700)
+            : const Color(0xFFBBBBBB);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(inset, const Radius.circular(2)),
+      Paint()
+        ..color = borderColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5,
+    );
+
+    // 等級角標（右上，>1 才顯示）
     if (unit.level > 1) {
-      _drawChar(canvas, '★' * unit.level, rect,
-          color: const Color(0xAAFFD700), fontSize: _cellSize * 0.15,
-          offsetY: -rect.height * 0.25);
+      final lv = _cellSize * 0.18;
+      _drawChar(canvas, '${unit.level}',
+        Rect.fromLTRB(inset.right - lv, inset.top, inset.right, inset.top + lv),
+        color: const Color(0xFF888888), fontSize: _cellSize * 0.15);
     }
+
+    // 主字
+    final textColor = (unit.type == 'general' || unit.type == 'general_char')
+        ? const Color(0xFFFFD700) : const Color(0xFF111111);
     _drawChar(canvas, unit.displayChar, rect,
-        color: _unitColor(unit.type), fontSize: _cellSize * 0.4);
+        color: textColor, fontSize: _cellSize * 0.4);
   }
 
   void _renderDivider(Canvas canvas) {
     final y = _aiBoardY + kRows * _cellSize;
     final rect = Rect.fromLTWH(_boardOffsetX, y, kCols * _cellSize, _dividerH);
     canvas.drawRect(rect, Paint()..color = const Color(0xFF111111));
-    _drawChar(canvas, 'VS', rect,
-        color: const Color(0x88FFFFFF), fontSize: 12);
+    _drawChar(canvas, '── 對決 ──', rect,
+        color: const Color(0x88FFFFFF), fontSize: 11);
   }
 
   void _renderEnemies(Canvas canvas, List<_Enemy> enemies,
@@ -518,18 +569,41 @@ class TowerDefenseGame extends FlameGame {
 
     for (final e in enemies) {
       if (e.markedDead) continue;
-      final pathCell = getPathCell(e.pathProgress, path);
-      final rect = _cellRect(pathCell[0], pathCell[1], boardY);
 
+      // 插值平滑位置
+      final pos = getPathPos(e.pathProgress, path);
+      final cx = _boardOffsetX + (pos.col + 0.5) * _cellSize;
+      final cy = boardY + (pos.row + 0.5) * _cellSize;
+      final sz = _cellSize * (e.isBoss ? 0.75 : 0.6);
+      final rect = Rect.fromCenter(center: Offset(cx, cy), width: sz, height: sz);
+
+      // 敵軍卡牌底
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(rect, const Radius.circular(2)),
+        Paint()..color = e.isBoss
+            ? const Color(0xFFFFCCCC)
+            : const Color(0xFFEEEEEE));
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(rect, const Radius.circular(2)),
+        Paint()
+          ..color = Color(e.color)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5);
+
+      // 血量條（在卡牌上方）
       final hpRatio = (e.hp / e.maxHp).clamp(0.0, 1.0);
-      final hpBar = Rect.fromLTWH(
-          rect.left, rect.bottom - 3, rect.width * hpRatio, 3);
-      canvas.drawRect(hpBar, Paint()..color = Color.fromARGB(200,
-          (255 * (1 - hpRatio)).toInt(), (200 * hpRatio).toInt(), 50));
+      final barTop = cy - sz / 2 - 5;
+      canvas.drawRect(
+        Rect.fromLTWH(cx - sz / 2, barTop, sz, 3),
+        Paint()..color = const Color(0x44000000));
+      canvas.drawRect(
+        Rect.fromLTWH(cx - sz / 2, barTop, sz * hpRatio, 3),
+        Paint()..color = Color.fromARGB(200,
+            (255 * (1 - hpRatio)).toInt(), (200 * hpRatio).toInt(), 50));
 
       _drawChar(canvas, e.key, rect,
           color: Color(e.color),
-          fontSize: _cellSize * (e.isBoss ? 0.55 : 0.4));
+          fontSize: _cellSize * (e.isBoss ? 0.5 : 0.38));
     }
   }
 
@@ -553,9 +627,33 @@ class TowerDefenseGame extends FlameGame {
     _cellSize, _cellSize,
   );
 
+  Rect _cellRectF(double row, double col, double boardY) => Rect.fromLTWH(
+    _boardOffsetX + col * _cellSize,
+    boardY + row * _cellSize,
+    _cellSize, _cellSize,
+  );
+
   Offset _cellCenter(int row, int col, {required bool isAiBoard}) {
     final boardY = isAiBoard ? _aiBoardY : _playerBoardY;
     return _cellRect(row, col, boardY).center;
+  }
+
+  // 蔣 HP 心形（排列在格子頂部）
+  void _drawHearts(Canvas canvas, Rect cellRect, int hp, int maxHp) {
+    final sz  = min(_cellSize * 0.17, 11.0);
+    const gap = 1.5;
+    final totalW = maxHp * sz + (maxHp - 1) * gap;
+    var x = cellRect.center.dx - totalW / 2;
+    final y = cellRect.top + 2;
+    for (int i = 0; i < maxHp; i++) {
+      _drawChar(canvas, '♥',
+        Rect.fromLTWH(x, y, sz, sz),
+        color: i < hp
+            ? const Color(0xFFE53935)
+            : const Color(0x44FFFFFF),
+        fontSize: sz * 0.9);
+      x += sz + gap;
+    }
   }
 
   void _drawChar(Canvas canvas, String text, Rect rect, {
@@ -570,11 +668,6 @@ class TowerDefenseGame extends FlameGame {
     canvas.drawParagraph(para,
         Offset(rect.left, rect.top + (rect.height - para.height) / 2 + offsetY));
   }
-
-  Color _unitColor(String type) =>
-      (type == 'general' || type == 'general_char')
-          ? const Color(0xFFFFD700)
-          : const Color(0xFF90EE90);
 
   // ── 公開給 UI 的接口 ─────────────────────────────────
 
