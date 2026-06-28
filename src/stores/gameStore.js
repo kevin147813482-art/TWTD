@@ -61,7 +61,8 @@ export const AI_YING_CELL      = GAME_CONFIG.AI_PATH[0]                         
 export const AI_JIANG_CELL     = GAME_CONFIG.AI_PATH[GAME_CONFIG.AI_PATH.length - 1]     // [0,0]
 
 export const gameStore = reactive({
-  phase: 'home',  // home | prep | playing | victory | defeat
+  phase: 'home',  // home | prep | playing | paused | victory | defeat
+  mapName: '立人與中正',
   wave: 1,
   bossWarning: false,
   enemyIdCounter: 0,
@@ -281,4 +282,8 @@ export const gameStore = reactive({
 
   nextWave() { this.wave++ },
   victory()  { this.phase = 'victory' },
+  togglePause() {
+    if (this.phase === 'playing') this.phase = 'paused'
+    else if (this.phase === 'paused') this.phase = 'playing'
+  },
 })

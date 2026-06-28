@@ -395,6 +395,11 @@ let waveScheduler = null
 let lastTick = 0
 
 function tick(now) {
+  if (gameStore.phase === 'paused') {
+    lastTick = now  // 重置，避免恢复时大时间跳跃
+    gameLoop = requestAnimationFrame(tick)
+    return
+  }
   if (gameStore.phase !== 'playing') return
   const delta = Math.min(now - lastTick, 100)
   lastTick = now

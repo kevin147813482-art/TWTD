@@ -3,11 +3,30 @@
 
     <!-- 顶部信息栏 -->
     <div class="top-bar">
-      <div class="food-pill">🍞 {{ store.playerFood }}</div>
-      <div v-if="store.phase==='prep'" class="wave-text prep-text">護駕！先布防</div>
-      <div v-else class="wave-text">第{{ store.wave }}波</div>
-      <div v-if="store.bossWarning" class="boss-tag">⚠ BOSS</div>
-      <div v-else class="score-pill">擊{{ store.playerScore }}</div>
+      <!-- 左：暂停 + 粮食 -->
+      <div class="top-left">
+        <button class="btn-pause" @click="store.togglePause()"
+          :disabled="store.phase === 'prep'">
+          {{ store.phase === 'paused' ? '▶' : '⏸' }}
+        </button>
+        <div class="food-count">
+          <span>🍞</span><span>{{ store.playerFood }}</span>
+        </div>
+      </div>
+      <!-- 中：关卡名 + 波次 -->
+      <div class="top-center">
+        <div v-if="store.phase === 'prep'" class="map-name prep-text">護駕！先布防</div>
+        <div v-else class="map-name">{{ store.mapName }}</div>
+        <div class="wave-label">
+          <span v-if="store.bossWarning" class="boss-tag">⚠ BOSS波</span>
+          <span v-else-if="store.phase === 'prep'">準備中</span>
+          <span v-else>第{{ store.wave }}波</span>
+        </div>
+      </div>
+      <!-- 右：击杀数 -->
+      <div class="top-right">
+        <div class="score-pill">擊{{ store.playerScore }}</div>
+      </div>
     </div>
 
     <!-- ══ AI 区（上半） ══ -->
@@ -423,9 +442,9 @@ const dragRangeStyle = computed(() => {
 <style scoped>
 /* ── 整体布局 ── */
 .game-board {
-  /* 棋盤佔螢幕高約55%（5行×2 = 10行），底部操作區佔約38%，頂欄7%
-     cell 取「寬/8」和「5.5vh」兩者較小值，保持格子正方形 */
-  --cell: min(calc(min(100vw, 420px) / 8), 5.5vh);
+  /* 顶栏 58px + 分隔线 22px ≈ 80px，底部约 35%
+     cell 取「宽/8」和「5.1vh」两者较小值，保持格子正方形 */
+  --cell: min(calc(min(100vw, 420px) / 8), 5.1vh);
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -434,22 +453,75 @@ const dragRangeStyle = computed(() => {
   overflow: hidden;
 }
 
-/* ── 顶部栏 ── */
+/* ── 顶部栏（三栏：左暂停+粮食 / 中关卡+波次 / 右击杀） ── */
 .top-bar {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 4px 10px;
-  background: rgba(0,0,0,0.75);
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: rgba(0,0,0,0.82);
   color: #ffd700;
-  font-size: 0.85rem;
+  flex-shrink: 0;
+  min-height: 58px;
+}
+
+.top-left, .top-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 72px;
+}
+.top-right { justify-content: flex-end; }
+
+.top-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  gap: 1px;
+}
+
+.btn-pause {
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 1rem;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
   flex-shrink: 0;
 }
-.wave-text { font-size: 1rem; font-weight: bold; }
-.food-pill, .score-pill {
+.btn-pause:disabled { opacity: 0.35; cursor: default; }
+
+.food-count {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.85rem;
   background: rgba(255,255,255,0.1);
-  padding: 1px 8px;
+  padding: 2px 7px;
+  border-radius: 10px;
+}
+
+.map-name {
+  font-size: 0.7rem;
+  color: #c8960c;
+  letter-spacing: 0.06em;
+}
+.wave-label {
+  font-size: 1rem;
+  font-weight: bold;
+  color: #ffd700;
+  line-height: 1.2;
+}
+
+.score-pill {
+  background: rgba(255,255,255,0.1);
+  padding: 2px 8px;
   border-radius: 10px;
   font-size: 0.8rem;
 }
