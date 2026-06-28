@@ -33,7 +33,7 @@ function createBoard(isAI = false) {
 }
 
 export function randomHandCard(wave) {
-  const generalChance = Math.min(0.05 + wave * 0.01, 0.25)
+  const generalChance = 0.15
   const shovelChance = 0.08
   const r = Math.random()
   if (r < generalChance) {
