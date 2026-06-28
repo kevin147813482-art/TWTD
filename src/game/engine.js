@@ -215,26 +215,11 @@ function startWave(wave) {
   next()
 }
 
-// ─── AI预置初始单位 ───────────────────────────────────────────
-function aiPlaceStarters() {
-  const starters = [
-    { key: '步', r: 2, c: 5 },
-    { key: '步', r: 3, c: 5 },
-    { key: '槍', r: 2, c: 4 },
-  ]
-  for (const { key, r, c } of starters) {
-    const cell = gameStore.aiBoard[r][c]
-    if (cell.kind === 'unlocked' && !cell.unit) {
-      cell.unit = { type:'unit', key, id: Date.now()+Math.random(), level:1, row:r, col:c, attacking:false, stunned:false }
-    }
-  }
-}
-
 // ─── AI自动操作 ───────────────────────────────────────────────
 let aiTimer = null
 
 function aiTick() {
-  if (gameStore.phase !== 'playing') return
+  if (gameStore.phase !== 'playing' && gameStore.phase !== 'prep') return
   const cost = GAME_CONFIG.RECRUIT_BASE_COST + gameStore.aiRecruitTimes * GAME_CONFIG.RECRUIT_COST_INCREMENT
   if (gameStore.aiFood >= cost) {
     gameStore.aiFood -= cost
@@ -285,7 +270,6 @@ function tickPrep(now) {
 function startBattle() {
   lastTick = performance.now()
   gameLoop = requestAnimationFrame(tick)
-  aiPlaceStarters()
   startWave(gameStore.wave)
   function scheduleNext() {
     waveScheduler = setTimeout(() => {
