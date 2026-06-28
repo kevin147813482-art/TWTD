@@ -84,6 +84,7 @@
 | 2026-06-28 | AI 在準備階段就開始招募 | `engine.js` | 與玩家起點平等 |
 | 2026-06-28 | 改為竖屏手機布局，格子正方形自適應 | `GameBoard.vue` | 對齊參考遊戲排版 |
 | 2026-06-28 | 頂部欄重設計：暫停+粮食+關卡名+波次三欄布局；實作暫停功能 | `GameBoard.vue`, `gameStore.js`, `engine.js` | 對齊參考遊戲 UI |
+| 2026-06-28 | 建立素材替換架構：assets.js 注冊表 + UnitSprite + EnemySprite 組件；字體改綁 --cell | `assets.js`, `UnitSprite.vue`, `EnemySprite.vue`, `GameBoard.vue` | 預留素材替換入口 |
 
 ---
 

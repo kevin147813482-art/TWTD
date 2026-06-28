@@ -63,7 +63,7 @@
               <!-- 单位 -->
               <div v-else-if="cell.unit" class="unit"
                 :class="[`ut-${cell.unit.type}`, { atk: cell.unit.attacking }]">
-                {{ cell.unit.type === 'general_char' ? cell.unit.char : cell.unit.key }}
+                <UnitSprite :unit="cell.unit" :anim-state="cell.unit.attacking ? 'attack' : 'idle'" />
                 <span v-if="cell.unit.level > 1" class="lv">{{ cell.unit.level }}</span>
               </div>
             </div>
@@ -86,7 +86,7 @@
             class="projectile"
             :class="`proj-${p.kind}`"
             :style="{ '--sx':p.sx,'--sy':p.sy,'--ex':p.ex,'--ey':p.ey }">
-            {{ p.kind==='shell'?'●':p.kind==='bullet'?'·':p.kind==='arrow'?'→':'✦' }}
+            {{ PROJECTILE_ASSETS[p.kind]?.char ?? '·' }}
           </div>
         </div>
         <!-- AI 敌军 -->
@@ -94,11 +94,11 @@
           <div v-for="e in store.aiEnemies" :key="e.id"
             class="enemy"
             :class="{ boss: e.isBoss }"
-            :style="{ ...getEnemyStyle(e.pathProgress, true), color: ECOLOR[e.key] }">
+            :style="getEnemyStyle(e.pathProgress, true)">
             <div class="ehp">
               <div class="ehpf" :style="{ width: (e.hp/e.maxHp*100)+'%', background: e.isBoss?'#e53935':'#66bb6a' }"></div>
             </div>
-            {{ e.key }}
+            <EnemySprite :enemy-key="e.key" />
           </div>
         </div>
         <!-- AI 危险警告 -->
@@ -154,7 +154,7 @@
                 @dragstart.stop="onBoardDragStart(ri, ci, $event)"
                 @dragend.stop="boardDrag = null; clearDragLine()"
                 @click.stop="infoUnit = cell.unit">
-                {{ cell.unit.type === 'general_char' ? cell.unit.char : cell.unit.key }}
+                <UnitSprite :unit="cell.unit" :anim-state="cell.unit.attacking ? 'attack' : 'idle'" />
                 <span v-if="cell.unit.level > 1" class="lv">{{ cell.unit.level }}</span>
               </div>
               <div v-else-if="cell.kind === 'locked'" class="lock-plus">+</div>
@@ -178,7 +178,7 @@
             class="projectile"
             :class="`proj-${p.kind}`"
             :style="{ '--sx':p.sx,'--sy':p.sy,'--ex':p.ex,'--ey':p.ey }">
-            {{ p.kind==='shell'?'●':p.kind==='bullet'?'·':p.kind==='arrow'?'→':'✦' }}
+            {{ PROJECTILE_ASSETS[p.kind]?.char ?? '·' }}
           </div>
         </div>
         <!-- 玩家敌军 -->
@@ -186,11 +186,11 @@
           <div v-for="e in store.playerEnemies" :key="e.id"
             class="enemy"
             :class="{ boss: e.isBoss }"
-            :style="{ ...getEnemyStyle(e.pathProgress, false), color: ECOLOR[e.key] }">
+            :style="getEnemyStyle(e.pathProgress, false)">
             <div class="ehp">
               <div class="ehpf" :style="{ width: (e.hp/e.maxHp*100)+'%', background: e.isBoss?'#e53935':'#66bb6a' }"></div>
             </div>
-            {{ e.key }}
+            <EnemySprite :enemy-key="e.key" />
           </div>
         </div>
         <!-- 拖拽范围预览圆圈 -->
@@ -279,8 +279,9 @@ import { ref, watch, computed } from 'vue'
 import { gameStore as store, PLAYER_JIANG_CELL, AI_JIANG_CELL, PLAYER_YING_CELL, AI_YING_CELL } from '../stores/gameStore.js'
 import { getEnemyStyle, getUnitRange } from '../game/engine.js'
 import { BASIC_UNITS, GENERALS, GAME_CONFIG } from '../game/config.js'
-
-const ECOLOR = { 匪:'#555', 共:'#1a237e', 赤:'#c62828', 寇:'#4e342e' }
+import { PROJECTILE_ASSETS } from '../game/assets.js'
+import UnitSprite from './UnitSprite.vue'
+import EnemySprite from './EnemySprite.vue'
 
 const dragging     = ref(null)   // 手牌index
 const boardDrag    = ref(null)   // [row, col] 棋盘单位拖动源
@@ -648,7 +649,8 @@ const dragRangeStyle = computed(() => {
 .jhp.off { color: rgba(0,0,0,0.25); }
 
 .jiang-char {
-  font-size: clamp(1.1rem, 4.5vw, 2.2rem);
+  /* 绑格子大小：手机(43px格)→21px，PC(47px格)→23px，感知一致 */
+  font-size: calc(var(--cell) * 0.5);
   font-weight: bold;
   color: #ffd700;
   text-shadow: 0 0 8px rgba(255,215,0,0.8);
@@ -675,7 +677,7 @@ const dragRangeStyle = computed(() => {
   background: #f5f0e0;
   border: 1.5px solid #bbb;
   border-radius: 3px;
-  font-size: clamp(0.65rem, 2.2vw, 1rem);
+  font-size: calc(var(--cell) * 0.38);
   font-weight: bold;
   color: #111;
   cursor: pointer;
@@ -787,7 +789,7 @@ const dragRangeStyle = computed(() => {
 .whp.on  { color: #e53935; }
 .whp.off { color: rgba(0,0,0,0.2); }
 .walker-char {
-  font-size: clamp(1rem, 4vw, 1.8rem);
+  font-size: calc(var(--cell) * 0.5);
   font-weight: bold;
   line-height: 1;
   text-shadow: 0 1px 3px rgba(0,0,0,0.5);
