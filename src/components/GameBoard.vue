@@ -105,7 +105,7 @@
                 'cell-locked':   cell.kind === 'locked',
                 'cell-dragover': dragOver === `${ri}-${ci}`,
               }"
-              @dragover.prevent="dragOver = `${ri}-${ci}`"
+              @dragover.prevent="dragOver = `${ri}-${ci}`; dragHover = [ri, ci]"
               @dragleave="dragOver = null"
               @drop="onDrop(ri, ci)"
               @click="onCellClick(ri, ci)">
@@ -174,6 +174,8 @@
             {{ e.key }}
           </div>
         </div>
+        <!-- 拖拽范围预览 -->
+        <div v-if="dragRangeStyle" class="range-preview" :style="dragRangeStyle"></div>
         <!-- 玩家 危险警告 -->
         <transition name="danger-fade">
           <div v-if="store.playerDanger" class="danger-overlay">危</div>
@@ -244,7 +246,7 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { gameStore as store, PLAYER_JIANG_CELL, AI_JIANG_CELL, PLAYER_YING_CELL, AI_YING_CELL } from '../stores/gameStore.js'
 import { getEnemyStyle } from '../game/engine.js'
 import { BASIC_UNITS, GENERALS, GAME_CONFIG } from '../game/config.js'
@@ -254,6 +256,7 @@ const ECOLOR = { 匪:'#555', 共:'#1a237e', 赤:'#c62828', 寇:'#4e342e' }
 const dragging     = ref(null)   // 手牌index
 const boardDrag    = ref(null)   // [row, col] 棋盘单位拖动源
 const dragOver     = ref(null)
+const dragHover    = ref(null)   // [row, col] 当前悬停格
 const selectedCard = ref(null)
 const infoUnit     = ref(null)
 const jiangFlash   = ref(false)
@@ -301,12 +304,13 @@ function onCellClick(r, c) {
 
 function onBoardDragStart(r, c) {
   dragging.value = null
-  // 延迟一帧，让拖拽幽灵图先生成（无虚线），再对原元素应用虚线样式
+  dragHover.value = null
   setTimeout(() => { boardDrag.value = [r, c] }, 0)
 }
 
 function onDrop(r, c) {
   dragOver.value = null
+  dragHover.value = null
   // 棋盘单位拖到棋盘格
   if (boardDrag.value) {
     const [sr, sc] = boardDrag.value
@@ -335,6 +339,45 @@ function onDropToHand(slotIndex) {
 function onGetShovel() {
   // 预留：看广告获得铲子
 }
+
+const COLS = GAME_CONFIG.BOARD_COLS
+const ROWS = GAME_CONFIG.BOARD_ROWS
+
+function getDragCard() {
+  if (boardDrag.value) {
+    const [r, c] = boardDrag.value
+    return store.playerBoard[r]?.[c]?.unit || null
+  }
+  if (dragging.value !== null) return store.playerHand[dragging.value] || null
+  return null
+}
+
+function getCardRange(card) {
+  if (!card) return 0
+  if (card.type === 'general') return GENERALS[card.key]?.range || 2
+  return BASIC_UNITS[card.key]?.range || 1
+}
+
+const dragRangeStyle = computed(() => {
+  const isDragging = boardDrag.value || dragging.value !== null
+  if (!isDragging || !dragHover.value) return null
+  const card = getDragCard()
+  if (!card || card.type === 'shovel') return null
+  const [r, c] = dragHover.value
+  const range = getCardRange(card)
+  // 圆心百分比，圆的直径 = range*2 个格子
+  const cx = (c + 0.5) / COLS * 100
+  const cy = (r + 0.5) / ROWS * 100
+  const rw = range / COLS * 100 * 2
+  const rh = range / ROWS * 100 * 2
+  return {
+    left:   `${cx}%`,
+    top:    `${cy}%`,
+    width:  `${rw}%`,
+    height: `${rh}%`,
+    transform: 'translate(-50%, -50%)',
+  }
+})
 </script>
 
 <style scoped>
@@ -639,6 +682,16 @@ function onGetShovel() {
 }
 .player-walker .walker-char { color: #ffd700; }
 .ai-walker .walker-char     { color: #7cb8e0; }
+
+/* ── 拖拽范围预览 ── */
+.range-preview {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1.5px solid rgba(255, 255, 255, 0.5);
+  pointer-events: none;
+  z-index: 20;
+}
 
 /* ── 危险警告 ── */
 .danger-overlay {
