@@ -6,7 +6,13 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "fable:guard": "tsx scripts/fable/iron-law-guard.ts",
+    "fable:guard:all": "tsx scripts/fable/iron-law-guard.ts --all",
+    "fable:visual": "tsx scripts/fable/visual-verify.ts",
+    "fable:visual:baseline": "tsx scripts/fable/visual-verify.ts --baseline",
+    "fable:memory": "tsx scripts/fable/memory-pipeline.ts",
+    "fable:check": "npm run fable:guard && npm run typecheck"
   },
   "dependencies": {
     "vue": "^3.5.38"

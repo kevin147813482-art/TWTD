@@ -1,5 +1,5 @@
 <template>
-  <div class="game-board">
+  <div class="game-board" ref="gameBoardRef" @dragover="onGlobalDragOver">
 
     <!-- 顶部信息栏 -->
     <div class="top-bar">
@@ -132,8 +132,8 @@
               <div v-else-if="cell.unit" class="unit"
                 :class="[`ut-${cell.unit.type}`, { atk: cell.unit.attacking, dragging: boardDrag && boardDrag[0]===ri && boardDrag[1]===ci }]"
                 draggable="true"
-                @dragstart.stop="onBoardDragStart(ri, ci)"
-                @dragend.stop="boardDrag = null"
+                @dragstart.stop="onBoardDragStart(ri, ci, $event)"
+                @dragend.stop="boardDrag = null; clearDragLine()"
                 @click.stop="infoUnit = cell.unit">
                 {{ cell.unit.type === 'general_char' ? cell.unit.char : cell.unit.key }}
                 <span v-if="cell.unit.level > 1" class="lv">{{ cell.unit.level }}</span>
@@ -174,7 +174,7 @@
             {{ e.key }}
           </div>
         </div>
-        <!-- 拖拽范围预览 -->
+        <!-- 拖拽范围预览圆圈 -->
         <div v-if="dragRangeStyle" class="range-preview" :style="dragRangeStyle"></div>
         <!-- 玩家 危险警告 -->
         <transition name="danger-fade">
@@ -198,8 +198,8 @@
             class="card"
             :class="{ empty: !card, selected: selectedCard === i }"
             draggable="true"
-            @dragstart="dragging = i; boardDrag = null"
-            @dragend="dragging = null"
+            @dragstart="dragging = i; boardDrag = null; recordDragStart($event)"
+            @dragend="dragging = null; clearDragLine()"
             @dragover.prevent
             @drop="onDropToHand(i)"
             @click="onCardClick(i)">
@@ -228,6 +228,16 @@
       </div>
     </div>
 
+    <!-- 拖拽虚线 -->
+    <svg v-if="showDragLine" class="drag-line-svg">
+      <line
+        :x1="dragLineStart.x" :y1="dragLineStart.y"
+        :x2="dragLineCur.x"   :y2="dragLineCur.y"
+        stroke="rgba(255,215,0,0.75)" stroke-width="2"
+        stroke-dasharray="6,4" stroke-linecap="round"
+      />
+    </svg>
+
     <!-- 单位弹窗 -->
     <div v-if="infoUnit" class="popup-mask" @click="infoUnit = null">
       <div class="popup" @click.stop>
@@ -248,7 +258,7 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
 import { gameStore as store, PLAYER_JIANG_CELL, AI_JIANG_CELL, PLAYER_YING_CELL, AI_YING_CELL } from '../stores/gameStore.js'
-import { getEnemyStyle } from '../game/engine.js'
+import { getEnemyStyle, getUnitRange } from '../game/engine.js'
 import { BASIC_UNITS, GENERALS, GAME_CONFIG } from '../game/config.js'
 
 const ECOLOR = { 匪:'#555', 共:'#1a237e', 赤:'#c62828', 寇:'#4e342e' }
@@ -260,6 +270,42 @@ const dragHover    = ref(null)   // [row, col] 当前悬停格
 const selectedCard = ref(null)
 const infoUnit     = ref(null)
 const jiangFlash   = ref(false)
+
+const gameBoardRef  = ref(null)
+const dragLineStart = ref(null)  // {x, y} 相对于 game-board
+const dragLineCur   = ref(null)  // {x, y} 相对于 game-board
+
+const showDragLine = computed(() =>
+  (dragging.value !== null || boardDrag.value !== null) &&
+  dragLineStart.value && dragLineCur.value
+)
+
+function recordDragStart(e) {
+  if (!gameBoardRef.value) return
+  const rect = e.currentTarget.getBoundingClientRect()
+  const boardRect = gameBoardRef.value.getBoundingClientRect()
+  dragLineStart.value = {
+    x: rect.left + rect.width / 2 - boardRect.left,
+    y: rect.top  + rect.height / 2 - boardRect.top,
+  }
+  dragLineCur.value = { ...dragLineStart.value }
+}
+
+function onGlobalDragOver(e) {
+  if (dragging.value === null && !boardDrag.value) return
+  if (!gameBoardRef.value) return
+  const boardRect = gameBoardRef.value.getBoundingClientRect()
+  dragLineCur.value = {
+    x: e.clientX - boardRect.left,
+    y: e.clientY - boardRect.top,
+  }
+}
+
+function clearDragLine() {
+  dragLineStart.value = null
+  dragLineCur.value   = null
+  dragHover.value     = null
+}
 
 watch(() => store.playerJiangHp, () => {
   jiangFlash.value = true
@@ -302,9 +348,10 @@ function onCellClick(r, c) {
   selectedCard.value = null
 }
 
-function onBoardDragStart(r, c) {
+function onBoardDragStart(r, c, e) {
   dragging.value = null
   dragHover.value = null
+  recordDragStart(e)
   setTimeout(() => { boardDrag.value = [r, c] }, 0)
 }
 
@@ -352,20 +399,13 @@ function getDragCard() {
   return null
 }
 
-function getCardRange(card) {
-  if (!card) return 0
-  if (card.type === 'general') return GENERALS[card.key]?.range || 2
-  return BASIC_UNITS[card.key]?.range || 1
-}
-
 const dragRangeStyle = computed(() => {
   const isDragging = boardDrag.value || dragging.value !== null
   if (!isDragging || !dragHover.value) return null
   const card = getDragCard()
   if (!card || card.type === 'shovel') return null
   const [r, c] = dragHover.value
-  const range = getCardRange(card)
-  // 圆心百分比，圆的直径 = range*2 个格子
+  const range = getUnitRange(card)
   const cx = (c + 0.5) / COLS * 100
   const cy = (r + 0.5) / ROWS * 100
   const rw = range / COLS * 100 * 2
@@ -683,7 +723,7 @@ const dragRangeStyle = computed(() => {
 .player-walker .walker-char { color: #ffd700; }
 .ai-walker .walker-char     { color: #7cb8e0; }
 
-/* ── 拖拽范围预览 ── */
+/* ── 拖拽范围预览圆圈 ── */
 .range-preview {
   position: absolute;
   border-radius: 50%;
@@ -691,6 +731,17 @@ const dragRangeStyle = computed(() => {
   border: 1.5px solid rgba(255, 255, 255, 0.5);
   pointer-events: none;
   z-index: 20;
+}
+
+/* ── 拖拽虚线 SVG ── */
+.drag-line-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 50;
+  overflow: visible;
 }
 
 /* ── 危险警告 ── */

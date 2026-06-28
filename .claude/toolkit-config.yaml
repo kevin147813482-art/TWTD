@@ -1,0 +1,57 @@
+# ============================================================
+# Fable Toolkit — twtd 專案配置
+# 對應 SKILL: ~/.claude/skills/fable-toolkit/SKILL.md
+# init 產生；請依專案實況填寫 path/入口
+# ============================================================
+
+project_name: twtd
+
+# ── 件 1：Iron Law Guard ──
+iron_law:
+  CLAUDE_md_path: CLAUDE.md
+  scan_paths: [app/, lib/, components/, src/]
+  exclude: [node_modules/, .next/, dist/, build/, scripts/fable/]
+  # 本專案特有的過渡標記（鐵律 #0/#1' 補充）；可留空
+  extra_patterns: []
+  # - regex: 'your_legacy_alias'
+  #   severity: error
+  #   rule: "鐵律 #1' — 某過渡 alias 雙路徑"
+
+# ── 件 2：Schema Drift ──
+schema:
+  tool: none              # 純前端 H5 遊戲，無 DB/schema
+  schema_path: ""
+  existing_script: ""
+
+# ── 件 3：Visual Verify ──
+visual:
+  base_url: http://localhost:5173
+  dev_server_wait_url: http://localhost:5173
+  storage_state: ""
+  critical_pages:
+    - { url: /, name: game-board }
+  viewports:
+    - { name: mobile, width: 390, height: 844 }
+    - { name: desktop, width: 1440, height: 900 }
+  diff_threshold: 0.02
+
+# ── 件 4：Memory Pipeline ──
+memory:
+  draft_dir: .claude/memory/drafts
+  promotion_threshold: 3
+  # 留空 → 自動推導 ~/.claude/projects/<cwd-slug>/memory
+  promote_to_user_memory: ""
+
+# ── 件 5：Quad-Verifier（需 Workflow tool + ultracode）──
+verifier:
+  model: opus-4-8
+  load_context:
+    - ~/.claude/CLAUDE.md
+    - CLAUDE.md
+  dimensions: [ironlaw, schema, security, ux_reality]
+
+# ── Smoke runner ──
+smoke:
+  entries:
+    - { pattern: scripts/smoke-*.ts, runner: "npx tsx" }
+  pass_threshold: 1.0

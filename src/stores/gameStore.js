@@ -33,7 +33,7 @@ function createBoard(isAI = false) {
 }
 
 export function randomHandCard(wave) {
-  const generalChance = 0.15
+  const generalChance = Math.min(0.05 + wave * 0.01, 0.25)
   const shovelChance = 0.08
   const r = Math.random()
   if (r < generalChance) {
@@ -132,16 +132,22 @@ export const gameStore = reactive({
     const card = this.playerHand[handIndex]
     if (!card || card.type === 'shovel') return false
     if (cell.unit) {
-      // 手牌拖到已有单位上：尝试合并
       const b = cell.unit
       const maxLv = BASIC_UNITS[card.key]?.maxLevel || 5
       if (card.type === b.type && card.key === b.key &&
           (card.level || 1) === b.level && b.level < maxLv) {
+        // 同兵种同等级：升级
         cell.unit = { ...b, level: b.level + 1 }
         this.playerHand[handIndex] = null
-        return true
+      } else {
+        // 不同兵种或不同等级：替换，原单位退回手牌
+        const back = b.type === 'general_char'
+          ? { type: 'general_char', key: b.key, generalKey: b.generalKey, char: b.char }
+          : { type: b.type === 'general' ? 'general' : 'unit', key: b.key, level: b.level }
+        cell.unit = { ...card, id: Date.now() + Math.random(), level: card.level || 1, row, col, attacking: false, stunned: false }
+        this.playerHand[handIndex] = back
       }
-      return false
+      return true
     }
     cell.unit = {
       ...card, id: Date.now() + Math.random(),
@@ -245,17 +251,16 @@ export const gameStore = reactive({
       toCell.unit = { ...fromCell.unit, row: toR, col: toC }
       fromCell.unit = null
     } else {
-      // 合并：同兵种同等级
       const a = fromCell.unit, b = toCell.unit
       const maxLv = BASIC_UNITS[a.key]?.maxLevel || 5
       if (a.type === b.type && a.key === b.key && a.level === b.level && a.level < maxLv) {
+        // 同兵种同等级：升级合并
         toCell.unit = { ...b, level: b.level + 1 }
         fromCell.unit = null
       } else {
-        // 无法合成：互换位置
-        const tmp = { ...fromCell.unit, row: toR, col: toC }
-        fromCell.unit = { ...toCell.unit, row: fromR, col: fromC }
-        toCell.unit = tmp
+        // 不同兵种或不同等级：交换位置
+        toCell.unit = { ...a, row: toR, col: toC }
+        fromCell.unit = { ...b, row: fromR, col: fromC }
       }
     }
   },

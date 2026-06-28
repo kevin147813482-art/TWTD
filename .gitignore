@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Fable Toolkit 暫存
+.claude/visual-current/
+.claude/visual-diffs/
+.claude/visual-auth.json
+.claude/memory/drafts/

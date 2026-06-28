@@ -49,7 +49,7 @@ function spawnProjectile(unit, target, isAI) {
 // 防御塔在地块格上，攻击相邻路线格上的敌军
 // 判断：敌军所在路线格 vs 塔的位置，距离是否在射程内
 
-function getUnitRange(unit) {
+export function getUnitRange(unit) {
   if (unit.type === 'general') return GENERALS[unit.key]?.range || 2
   return BASIC_UNITS[unit.key]?.range || 1
 }
@@ -217,35 +217,138 @@ function startWave(wave) {
 
 // ─── AI自动操作 ───────────────────────────────────────────────
 let aiTimer = null
+let aiHand = []  // AI 当前手牌
+
+function aiGetEmpties() {
+  const empties = []
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const cell = gameStore.aiBoard[r][c]
+      if (cell.kind === 'unlocked' && !cell.unit) empties.push([r, c])
+    }
+  }
+  return empties
+}
+
+// 尝试合并：找相邻同兵种同等级的单位，合并其中一对
+function aiTryMerge() {
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const cell = gameStore.aiBoard[r][c]
+      if (!cell.unit || cell.unit.type !== 'unit') continue
+      const a = cell.unit
+      const maxLv = BASIC_UNITS[a.key]?.maxLevel || 5
+      if (a.level >= maxLv) continue
+      for (const [dr, dc] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+        const nr = r+dr, nc = c+dc
+        if (nr<0||nr>=ROWS||nc<0||nc>=COLS) continue
+        const nb = gameStore.aiBoard[nr][nc]
+        if (!nb.unit || nb.unit.type !== 'unit') continue
+        if (nb.unit.key === a.key && nb.unit.level === a.level) {
+          cell.unit = { ...a, level: a.level + 1 }
+          nb.unit = null
+          return true
+        }
+      }
+    }
+  }
+  return false
+}
+
+// 尝试挪动：把孤立的单位移近路线（离路线更近的空格）
+function aiTryMove() {
+  const units = []
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const cell = gameStore.aiBoard[r][c]
+      if (cell.unit && cell.kind === 'unlocked') units.push([r, c])
+    }
+  }
+  if (!units.length) return false
+  // 找一个距离路线较远的单位
+  const distToPath = (r, c) => Math.min(
+    COLS - 1 - c,  // 距右列
+    r,             // 距底行（AI路线用底行）
+    c              // 距左列
+  )
+  units.sort((a, b) => distToPath(b[0], b[1]) - distToPath(a[0], a[1]))
+  const [fr, fc] = units[0]
+  // 找一个更靠近路线的空格
+  const empties = aiGetEmpties().filter(([r, c]) => distToPath(r, c) < distToPath(fr, fc))
+  if (!empties.length) return false
+  const [tr, tc] = empties[Math.floor(Math.random() * empties.length)]
+  const unit = gameStore.aiBoard[fr][fc].unit
+  gameStore.aiBoard[tr][tc].unit = { ...unit, row: tr, col: tc }
+  gameStore.aiBoard[fr][fc].unit = null
+  return true
+}
+
+// 放置一张手牌
+function aiPlaceOneCard() {
+  const idx = aiHand.findIndex(c => c && c.type !== 'shovel')
+  if (idx === -1) return false
+  const card = aiHand[idx]
+
+  // 先看能不能合并到棋盘上已有的单位
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const cell = gameStore.aiBoard[r][c]
+      if (!cell.unit || cell.kind !== 'unlocked') continue
+      const b = cell.unit
+      const maxLv = BASIC_UNITS[card.key]?.maxLevel || 5
+      if (card.type === b.type && card.key === b.key && (card.level||1) === b.level && b.level < maxLv) {
+        cell.unit = { ...b, level: b.level + 1 }
+        aiHand[idx] = null
+        return true
+      }
+    }
+  }
+
+  // 放到空格：优先靠近路线的格子
+  const empties = aiGetEmpties()
+  if (!empties.length) { aiHand[idx] = null; return false }
+  const near = empties.filter(([r, c]) => c === COLS-2 || r === ROWS-2 || c === 1)
+  const pool = near.length ? near : empties
+  const [r, c] = pool[Math.floor(Math.random() * pool.length)]
+  gameStore.aiBoard[r][c].unit = {
+    ...card, id: Date.now() + Math.random(),
+    level: card.level || 1, row: r, col: c, attacking: false, stunned: false,
+  }
+  aiHand[idx] = null
+  gameStore.checkMerge(gameStore.aiBoard, r, c)
+  return true
+}
 
 function aiTick() {
   if (gameStore.phase !== 'playing' && gameStore.phase !== 'prep') return
-  const cost = GAME_CONFIG.RECRUIT_BASE_COST + gameStore.aiRecruitTimes * GAME_CONFIG.RECRUIT_COST_INCREMENT
-  if (gameStore.aiFood >= cost) {
-    gameStore.aiFood -= cost
-    gameStore.aiRecruitTimes++
-    const hand = Array.from({ length: GAME_CONFIG.HAND_SIZE }, () => randomHandCard(gameStore.wave))
-    for (const card of hand) {
-      if (!card || card.type === 'shovel') continue
-      const empties = []
-      for (let r=0; r<ROWS; r++) {
-        for (let c=0; c<COLS; c++) {
-          const cell = gameStore.aiBoard[r][c]
-          if (cell.kind === 'unlocked' && !cell.unit) empties.push([r,c])
-        }
-      }
-      if (!empties.length) break
-      const near = empties.filter(([r,c]) => c===1||c===COLS-2||r===1||r===ROWS-2)
-      const pool = near.length ? near : empties
-      const [r,c] = pool[Math.floor(Math.random()*pool.length)]
-      gameStore.aiBoard[r][c].unit = {
-        ...card, id: Date.now()+Math.random(),
-        level: card.level||1, row:r, col:c, attacking:false, stunned:false,
-      }
-      gameStore.checkMerge(gameStore.aiBoard, r, c)
+
+  const hasCards = aiHand.some(c => c && c.type !== 'shovel')
+
+  if (hasCards) {
+    // 有手牌：随机决定放牌 or 先做维护动作
+    const roll = Math.random()
+    if (roll < 0.15 && aiTryMerge()) {
+      // 合并
+    } else if (roll < 0.20 && aiTryMove()) {
+      // 挪动
+    } else {
+      aiPlaceOneCard()
+    }
+    aiTimer = setTimeout(aiTick, 800 + Math.random() * 1200)  // 0.8-2秒放一张
+  } else {
+    // 手牌空了：尝试招募
+    const cost = GAME_CONFIG.RECRUIT_BASE_COST + gameStore.aiRecruitTimes * GAME_CONFIG.RECRUIT_COST_INCREMENT
+    if (gameStore.aiFood >= cost) {
+      gameStore.aiFood -= cost
+      gameStore.aiRecruitTimes++
+      aiHand = Array.from({ length: GAME_CONFIG.HAND_SIZE }, () => randomHandCard(gameStore.wave))
+      aiTimer = setTimeout(aiTick, 1000 + Math.random() * 1000)  // 拿到牌后稍等
+    } else {
+      // 没钱：等一会再检查，期间可以做维护
+      if (Math.random() < 0.4) aiTryMerge()
+      aiTimer = setTimeout(aiTick, 1500 + Math.random() * 1500)
     }
   }
-  aiTimer = setTimeout(aiTick, 2000 + Math.random()*2000)  // 加快：2-4秒/次
 }
 
 // ─── 蔣走向指定位置（准备阶段） ──────────────────────────────
@@ -281,6 +384,8 @@ function startBattle() {
     }, GAME_CONFIG.WAVE_INTERVAL)
   }
   scheduleNext()
+  if (aiTimer) clearTimeout(aiTimer)
+  aiHand = []
   aiTimer = setTimeout(aiTick, 2000)
 }
 
@@ -312,4 +417,5 @@ export function stopEngine() {
   if (waveSpawnTimer) clearTimeout(waveSpawnTimer)
   if (aiTimer) clearTimeout(aiTimer)
   cooldowns.clear()
+  aiHand = []
 }
