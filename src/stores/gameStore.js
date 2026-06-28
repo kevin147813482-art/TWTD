@@ -61,11 +61,13 @@ export const AI_YING_CELL      = GAME_CONFIG.AI_PATH[0]                         
 export const AI_JIANG_CELL     = GAME_CONFIG.AI_PATH[GAME_CONFIG.AI_PATH.length - 1]     // [0,0]
 
 export const gameStore = reactive({
-  phase: 'home',
+  phase: 'home',  // home | prep | playing | victory | defeat
   wave: 1,
   bossWarning: false,
   enemyIdCounter: 0,
   projectiles: [],
+  playerJiangProgress: 0,  // 准备阶段蔣沿路线行走进度
+  aiJiangProgress: 0,
 
   playerBoard: createBoard(false),
   playerJiangHp: GAME_CONFIG.JIANG_INITIAL_HP,
@@ -88,7 +90,7 @@ export const gameStore = reactive({
   get canPlayerRecruit()  { return this.playerFood >= this.playerRecruitCost },
 
   startGame() {
-    this.phase = 'playing'
+    this.phase = 'prep'
     this.wave = 1
     this.bossWarning = false
     this.enemyIdCounter = 0
@@ -100,6 +102,8 @@ export const gameStore = reactive({
     this.playerHand = Array(GAME_CONFIG.HAND_SIZE).fill(null)
     this.playerEnemies = []
     this.playerScore = 0
+    this.playerJiangProgress = 0
+    this.aiJiangProgress = 0
     this.aiBoard = createBoard(true)
     this.aiJiangHp = GAME_CONFIG.JIANG_INITIAL_HP
     this.aiJiangMaxHp = GAME_CONFIG.JIANG_INITIAL_HP

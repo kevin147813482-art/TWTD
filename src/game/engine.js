@@ -221,6 +221,42 @@ function aiTick() {
   aiTimer = setTimeout(aiTick, 3500 + Math.random()*3000)
 }
 
+// ─── 蔣走向指定位置（准备阶段） ──────────────────────────────
+const PREP_DURATION = 10000  // 10秒准备时间
+let prepStart = 0
+
+function tickPrep(now) {
+  if (gameStore.phase !== 'prep') return
+  const elapsed = now - prepStart
+  const t = Math.min(elapsed / PREP_DURATION, 1)
+  // 蔣沿路线从头走到尾（progress: 0 → PATH_LEN-1）
+  gameStore.playerJiangProgress = t * (PATH_LEN - 1)
+  gameStore.aiJiangProgress     = t * (PATH_LEN - 1)
+  if (t >= 1) {
+    gameStore.phase = 'playing'
+    startBattle()
+    return
+  }
+  gameLoop = requestAnimationFrame(tickPrep)
+}
+
+function startBattle() {
+  lastTick = performance.now()
+  gameLoop = requestAnimationFrame(tick)
+  startWave(gameStore.wave)
+  function scheduleNext() {
+    waveScheduler = setTimeout(() => {
+      if (gameStore.phase !== 'playing') return
+      if (gameStore.wave >= 30) { gameStore.victory(); return }
+      gameStore.nextWave()
+      startWave(gameStore.wave)
+      scheduleNext()
+    }, GAME_CONFIG.WAVE_INTERVAL)
+  }
+  scheduleNext()
+  aiTimer = setTimeout(aiTick, 2000)
+}
+
 // ─── 主循环 ───────────────────────────────────────────────────
 let gameLoop = null
 let waveScheduler = null
@@ -238,19 +274,8 @@ function tick(now) {
 }
 
 export function startEngine() {
-  lastTick = performance.now()
-  gameLoop = requestAnimationFrame(tick)
-  startWave(gameStore.wave)
-  function scheduleNext() {
-    waveScheduler = setTimeout(() => {
-      if (gameStore.phase !== 'playing') return
-      if (gameStore.wave >= 30) { gameStore.victory(); return }
-      gameStore.nextWave()
-      startWave(gameStore.wave)
-      scheduleNext()
-    }, GAME_CONFIG.WAVE_INTERVAL)
-  }
-  scheduleNext()
+  prepStart = performance.now()
+  gameLoop = requestAnimationFrame(tickPrep)
   aiTimer = setTimeout(aiTick, 2000)
 }
 

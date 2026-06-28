@@ -4,7 +4,8 @@
     <!-- 顶部信息栏 -->
     <div class="top-bar">
       <div class="food-pill">🍞 {{ store.playerFood }}</div>
-      <div class="wave-text">第{{ store.wave }}波</div>
+      <div v-if="store.phase==='prep'" class="wave-text prep-text">護駕！先布防</div>
+      <div v-else class="wave-text">第{{ store.wave }}波</div>
       <div v-if="store.bossWarning" class="boss-tag">⚠ BOSS</div>
       <div v-else class="score-pill">擊{{ store.playerScore }}</div>
     </div>
@@ -21,8 +22,8 @@
                 'cell-unlocked': cell.kind === 'unlocked',
                 'cell-locked':   cell.kind === 'locked',
               }">
-              <!-- 蔣（AI: [0,0]）带HP血条 -->
-              <div v-if="ri === AI_JIANG_CELL[0] && ci === AI_JIANG_CELL[1]"
+              <!-- 蔣（AI: [0,0]）带HP血条，准备阶段隐藏（蔣在走路） -->
+              <div v-if="ri === AI_JIANG_CELL[0] && ci === AI_JIANG_CELL[1] && store.phase!=='prep'"
                 class="jiang-cell">
                 <div class="jiang-hp-row">
                   <span v-for="i in store.aiJiangMaxHp" :key="i"
@@ -49,6 +50,17 @@
             </div>
           </template>
         </div>
+        <!-- AI 蔣行走（准备阶段） -->
+        <div v-if="store.phase==='prep'" class="enemy-layer">
+          <div class="jiang-walker ai-walker"
+            :style="getEnemyStyle(store.aiJiangProgress, true)">
+            <div class="walker-hp">
+              <span v-for="i in store.aiJiangMaxHp" :key="i"
+                :class="['whp', i<=store.aiJiangHp?'on':'off']">♥</span>
+            </div>
+            <span class="walker-char">蔣</span>
+          </div>
+        </div>
         <!-- AI 投射物 -->
         <div class="enemy-layer">
           <div v-for="p in store.projectiles.filter(p=>p.side==='ai')" :key="p.id"
@@ -64,10 +76,10 @@
             class="enemy"
             :class="{ boss: e.isBoss }"
             :style="{ ...getEnemyStyle(e.pathProgress, true), color: ECOLOR[e.key] }">
-            {{ e.key }}
-            <div v-if="e.isBoss" class="ehp">
-              <div class="ehpf" :style="{ width: (e.hp/e.maxHp*100)+'%' }"></div>
+            <div class="ehp">
+              <div class="ehpf" :style="{ width: (e.hp/e.maxHp*100)+'%', background: e.isBoss?'#e53935':'#66bb6a' }"></div>
             </div>
+            {{ e.key }}
           </div>
         </div>
       </div>
@@ -93,8 +105,8 @@
               @dragleave="dragOver = null"
               @drop="onDrop(ri, ci)"
               @click="onCellClick(ri, ci)">
-              <!-- 蔣（玩家: [4,7]）带HP血条 -->
-              <div v-if="ri === PLAYER_JIANG_CELL[0] && ci === PLAYER_JIANG_CELL[1]"
+              <!-- 蔣（玩家: [4,7]）带HP血条，准备阶段隐藏 -->
+              <div v-if="ri === PLAYER_JIANG_CELL[0] && ci === PLAYER_JIANG_CELL[1] && store.phase!=='prep'"
                 class="jiang-cell" :class="{ damaged: jiangFlash }">
                 <div class="jiang-hp-row">
                   <span v-for="i in store.playerJiangMaxHp" :key="i"
@@ -123,6 +135,17 @@
             </div>
           </template>
         </div>
+        <!-- 玩家 蔣行走（准备阶段） -->
+        <div v-if="store.phase==='prep'" class="enemy-layer">
+          <div class="jiang-walker player-walker"
+            :style="getEnemyStyle(store.playerJiangProgress, false)">
+            <div class="walker-hp">
+              <span v-for="i in store.playerJiangMaxHp" :key="i"
+                :class="['whp', i<=store.playerJiangHp?'on':'off']">♥</span>
+            </div>
+            <span class="walker-char">蔣</span>
+          </div>
+        </div>
         <!-- 玩家投射物 -->
         <div class="enemy-layer">
           <div v-for="p in store.projectiles.filter(p=>p.side==='player')" :key="p.id"
@@ -138,10 +161,10 @@
             class="enemy"
             :class="{ boss: e.isBoss }"
             :style="{ ...getEnemyStyle(e.pathProgress, false), color: ECOLOR[e.key] }">
-            {{ e.key }}
-            <div v-if="e.isBoss" class="ehp">
-              <div class="ehpf" :style="{ width: (e.hp/e.maxHp*100)+'%' }"></div>
+            <div class="ehp">
+              <div class="ehpf" :style="{ width: (e.hp/e.maxHp*100)+'%', background: e.isBoss?'#e53935':'#66bb6a' }"></div>
             </div>
+            {{ e.key }}
           </div>
         </div>
       </div>
@@ -307,7 +330,8 @@ function onGetShovel() {
   border-radius: 10px;
   font-size: 0.8rem;
 }
-.boss-tag { color: #ff4444; font-weight: bold; animation: pulse 0.4s infinite alternate; }
+.boss-tag  { color: #ff4444; font-weight: bold; animation: pulse 0.4s infinite alternate; }
+.prep-text { color: #ffd700; animation: pulse 0.8s infinite alternate; }
 @keyframes pulse { from {opacity:.6} to {opacity:1} }
 
 /* ── 战场区（上下两半） ── */
@@ -546,10 +570,37 @@ function onGetShovel() {
 
 .ehp {
   position: absolute;
-  bottom: -5px; left:0; right:0;
-  height: 3px; background:#ddd; border-radius:2px;
+  top: -5px; left:0; right:0;
+  height: 3px; background:rgba(0,0,0,0.25); border-radius:2px;
 }
-.ehpf { height:100%; background:#e53935; border-radius:2px; }
+.ehpf { height:100%; border-radius:2px; transition: width 0.1s; }
+
+/* ── 蔣行走（准备阶段） ── */
+.jiang-walker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  pointer-events: none;
+  z-index: 5;
+}
+.walker-hp {
+  display: flex;
+  gap: 1px;
+}
+.whp { font-size: 0.6rem; line-height:1; }
+.whp.on  { color: #e53935; }
+.whp.off { color: rgba(0,0,0,0.2); }
+.walker-char {
+  font-size: clamp(1rem, 4vw, 1.8rem);
+  font-weight: bold;
+  line-height: 1;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+}
+.player-walker .walker-char { color: #ffd700; }
+.ai-walker .walker-char     { color: #7cb8e0; }
 
 /* ── 分割线 ── */
 .divider {
