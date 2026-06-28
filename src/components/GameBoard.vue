@@ -123,6 +123,7 @@
                 'cell-unlocked': cell.kind === 'unlocked',
                 'cell-locked':   cell.kind === 'locked',
                 'cell-dragover': dragOver === `${ri}-${ci}`,
+              'cell-shovel-target': shovelActive && cell.kind === 'locked',
               }"
               @dragover.prevent="dragOver = `${ri}-${ci}`; dragHover = [ri, ci]"
               @dragleave="dragOver = null"
@@ -215,7 +216,12 @@
         <div class="hand-cards">
           <div v-for="(card, i) in store.playerHand" :key="i"
             class="card"
-            :class="{ empty: !card, selected: selectedCard === i }"
+            :class="{
+              empty: !card,
+              selected: selectedCard === i,
+              'card-fly-in': handAnimating && !!card,
+            }"
+            :style="handAnimating && card ? { '--ci': i } : {}"
             draggable="true"
             @dragstart="dragging = i; boardDrag = null; recordDragStart($event)"
             @dragend="dragging = null; clearDragLine()"
@@ -229,10 +235,13 @@
           </div>
         </div>
 
-        <!-- 铲子/广告 图标 -->
-        <div class="side-icon shovel-icon" @click="onGetShovel">
+        <!-- 鏟子按鈕（點擊獲得一把鏟子；正式版接廣告） -->
+        <div class="side-icon shovel-icon" @click="onGetShovel"
+          :class="{ 'shovel-active': shovelActive }">
           <span class="side-icon-char">⛏</span>
-          <span class="side-icon-sub">x2</span>
+          <span class="side-icon-sub">
+            +1
+          </span>
         </div>
       </div>
 
@@ -290,6 +299,13 @@ const dragHover    = ref(null)   // [row, col] 当前悬停格
 const selectedCard = ref(null)
 const infoUnit     = ref(null)
 const jiangFlash   = ref(false)
+const handAnimating = ref(false) // 征兵後觸發手牌飛入動畫
+
+// 當前手牌中是否有鏟子被選中或拖動（高亮鎖定格用）
+const shovelActive = computed(() => {
+  const idx = dragging.value ?? selectedCard.value
+  return idx !== null && store.playerHand[idx]?.type === 'shovel'
+})
 
 const gameBoardRef  = ref(null)
 const dragLineStart = ref(null)  // {x, y} 相对于 game-board
@@ -330,6 +346,15 @@ function clearDragLine() {
 watch(() => store.playerJiangHp, () => {
   jiangFlash.value = true
   setTimeout(() => { jiangFlash.value = false }, 400)
+})
+
+// 征兵後觸發手牌飛入動畫（500ms = 5×60ms延遲 + 300ms動畫）
+watch(() => store.playerRecruitVersion, () => {
+  handAnimating.value = false
+  requestAnimationFrame(() => {
+    handAnimating.value = true
+    setTimeout(() => { handAnimating.value = false }, 700)
+  })
 })
 
 function cardStyle(card) {
@@ -404,7 +429,10 @@ function onDropToHand(slotIndex) {
 }
 
 function onGetShovel() {
-  // 预留：看广告获得铲子
+  // 找第一個空槽放入鏟子（正式版需接廣告 SDK）
+  const slot = store.playerHand.findIndex(c => c === null)
+  if (slot === -1) return  // 手牌滿了
+  store.playerHand[slot] = { type: 'shovel', key: '鏟' }
 }
 
 const COLS = GAME_CONFIG.BOARD_COLS
@@ -564,6 +592,16 @@ const dragRangeStyle = computed(() => {
 .cell-unlocked { background: #f0ece0; }
 .cell-locked   { background: #6a8c68; cursor: pointer; }
 .cell-dragover { outline: 2px solid #ffd700; }
+/* 鏟子激活時鎖定格脈動提示 */
+.cell-shovel-target {
+  background: #8b4513 !important;
+  outline: 2px dashed #f5a623;
+  animation: shovelPulse 0.7s infinite alternate;
+}
+@keyframes shovelPulse {
+  from { background-color: #8b4513; }
+  to   { background-color: #c0622a; }
+}
 
 .lock-plus {
   color: rgba(255,255,255,0.3);
@@ -890,6 +928,13 @@ const dragRangeStyle = computed(() => {
   background: radial-gradient(circle at 40% 35%, #d4ac0d, #9a7a00);
   border: 2px solid #f1c40f;
   box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+  transition: transform 0.1s;
+}
+.shovel-icon:active { transform: scale(0.92); }
+.shovel-icon.shovel-active {
+  background: radial-gradient(circle at 40% 35%, #e67e22, #a04000);
+  border-color: #f5a623;
+  box-shadow: 0 0 10px rgba(245,166,35,0.7);
 }
 .side-icon-char {
   font-size: 1.3rem;
@@ -927,6 +972,16 @@ const dragRangeStyle = computed(() => {
 .card.empty { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.15); }
 .card.selected { border-color: #ffd700; background: #fff8d0; }
 .card:not(.empty):hover { border-color: #999; }
+
+/* 手牌飛入動畫：從右側飛入，右邊卡先到（index 4 delay=0，index 0 delay=240ms） */
+@keyframes cardFlyIn {
+  from { transform: translateX(160px); opacity: 0; }
+  to   { transform: translateX(0);     opacity: 1; }
+}
+.card.card-fly-in {
+  animation: cardFlyIn 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc((4 - var(--ci, 0)) * 55ms);
+}
 
 .card-char { font-size: 1.2rem; font-weight: bold; }
 .card-lv {

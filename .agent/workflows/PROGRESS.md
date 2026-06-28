@@ -85,6 +85,8 @@
 | 2026-06-28 | 改為竖屏手機布局，格子正方形自適應 | `GameBoard.vue` | 對齊參考遊戲排版 |
 | 2026-06-28 | 頂部欄重設計：暫停+粮食+關卡名+波次三欄布局；實作暫停功能 | `GameBoard.vue`, `gameStore.js`, `engine.js` | 對齊參考遊戲 UI |
 | 2026-06-28 | 建立素材替換架構：assets.js 注冊表 + UnitSprite + EnemySprite 組件；字體改綁 --cell | `assets.js`, `UnitSprite.vue`, `EnemySprite.vue`, `GameBoard.vue` | 預留素材替換入口 |
+| 2026-06-28 | P0 手牌飛入動畫：從右側逐張飛入，右邊卡先到（index 4→0，55ms 間距） | `gameStore.js`, `GameBoard.vue` | 對齊參考遊戲手感 |
+| 2026-06-28 | P1 鏟子功能：⛏+1 按鈕加鏟子到手牌，持鏟時鎖定格橘色脈動高亮 | `GameBoard.vue` | openCell 接線完成 |
 
 ---
 

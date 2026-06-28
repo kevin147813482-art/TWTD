@@ -77,6 +77,7 @@ export const gameStore = reactive({
   playerJiangMaxHp: GAME_CONFIG.JIANG_INITIAL_HP,
   playerFood: GAME_CONFIG.INITIAL_FOOD,
   playerRecruitTimes: 0,
+  playerRecruitVersion: 0,  // 每次征兵+1，供組件偵測觸發飛入動畫
   playerHand: Array(GAME_CONFIG.HAND_SIZE).fill(null),
   playerEnemies: [],
   playerScore: 0,
@@ -122,6 +123,7 @@ export const gameStore = reactive({
     if (!this.canPlayerRecruit) return
     this.playerFood -= this.playerRecruitCost
     this.playerRecruitTimes++
+    this.playerRecruitVersion++
     for (let i = 0; i < GAME_CONFIG.HAND_SIZE; i++) {
       this.playerHand[i] = randomHandCard(this.wave)
     }
