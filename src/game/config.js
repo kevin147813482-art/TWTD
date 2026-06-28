@@ -47,7 +47,7 @@ export const GAME_CONFIG = {
   HAND_SIZE: 5,
 
   // 波次
-  WAVE_INTERVAL: 20000,
+  WAVE_INTERVAL: 10000,
 }
 
 // 基础兵种
