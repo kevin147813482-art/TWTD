@@ -218,7 +218,7 @@
       <!-- 征兵按钮行 -->
       <div class="recruit-row">
         <button class="recruit-btn"
-          :class="{ disabled: !store.canPlayerRecruit }"
+          :class="{ disabled: !store.canPlayerRecruit, ready: store.canPlayerRecruit }"
           @click="store.playerRecruit()">
           <span>征兵</span>
           <span class="cost">🍞{{ store.playerRecruitCost }}</span>
@@ -777,6 +777,13 @@ function onGetShovel() {
   justify-content: center;
 }
 .recruit-btn.disabled { opacity: 0.4; cursor: not-allowed; }
+.recruit-btn.ready {
+  animation: recruitGlow 1.2s ease-in-out infinite alternate;
+}
+@keyframes recruitGlow {
+  from { box-shadow: 0 0 4px #c8960c; border-color: #c8960c; }
+  to   { box-shadow: 0 0 14px #ffd700, 0 0 4px #fff; border-color: #ffd700; }
+}
 .cost { font-size: 0.8rem; color: #ffd700; }
 
 /* 弹窗 */

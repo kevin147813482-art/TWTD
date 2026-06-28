@@ -128,15 +128,26 @@ export const gameStore = reactive({
 
   deployUnit(handIndex, row, col) {
     const cell = this.playerBoard[row][col]
-    if (cell.kind !== 'unlocked' || cell.unit) return false
+    if (cell.kind !== 'unlocked') return false
     const card = this.playerHand[handIndex]
     if (!card || card.type === 'shovel') return false
+    if (cell.unit) {
+      // 手牌拖到已有单位上：尝试合并
+      const b = cell.unit
+      const maxLv = BASIC_UNITS[card.key]?.maxLevel || 5
+      if (card.type === b.type && card.key === b.key &&
+          (card.level || 1) === b.level && b.level < maxLv) {
+        cell.unit = { ...b, level: b.level + 1 }
+        this.playerHand[handIndex] = null
+        return true
+      }
+      return false
+    }
     cell.unit = {
       ...card, id: Date.now() + Math.random(),
       level: card.level || 1, row, col, attacking: false, stunned: false,
     }
     this.playerHand[handIndex] = null
-    this.checkMerge(this.playerBoard, row, col)
     return true
   },
 
