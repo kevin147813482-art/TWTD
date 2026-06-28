@@ -215,6 +215,21 @@ function startWave(wave) {
   next()
 }
 
+// ─── AI预置初始单位 ───────────────────────────────────────────
+function aiPlaceStarters() {
+  const starters = [
+    { key: '步', r: 2, c: 5 },
+    { key: '步', r: 3, c: 5 },
+    { key: '槍', r: 2, c: 4 },
+  ]
+  for (const { key, r, c } of starters) {
+    const cell = gameStore.aiBoard[r][c]
+    if (cell.kind === 'unlocked' && !cell.unit) {
+      cell.unit = { type:'unit', key, id: Date.now()+Math.random(), level:1, row:r, col:c, attacking:false, stunned:false }
+    }
+  }
+}
+
 // ─── AI自动操作 ───────────────────────────────────────────────
 let aiTimer = null
 
@@ -235,7 +250,6 @@ function aiTick() {
         }
       }
       if (!empties.length) break
-      // 优先靠近路线的格子（提高攻击覆盖）
       const near = empties.filter(([r,c]) => c===1||c===COLS-2||r===1||r===ROWS-2)
       const pool = near.length ? near : empties
       const [r,c] = pool[Math.floor(Math.random()*pool.length)]
@@ -246,7 +260,7 @@ function aiTick() {
       gameStore.checkMerge(gameStore.aiBoard, r, c)
     }
   }
-  aiTimer = setTimeout(aiTick, 3500 + Math.random()*3000)
+  aiTimer = setTimeout(aiTick, 2000 + Math.random()*2000)  // 加快：2-4秒/次
 }
 
 // ─── 蔣走向指定位置（准备阶段） ──────────────────────────────
@@ -271,6 +285,7 @@ function tickPrep(now) {
 function startBattle() {
   lastTick = performance.now()
   gameLoop = requestAnimationFrame(tick)
+  aiPlaceStarters()
   startWave(gameStore.wave)
   function scheduleNext() {
     waveScheduler = setTimeout(() => {
