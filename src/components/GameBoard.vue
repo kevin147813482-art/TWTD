@@ -423,6 +423,9 @@ const dragRangeStyle = computed(() => {
 <style scoped>
 /* ── 整体布局 ── */
 .game-board {
+  /* cell = 可用高度 / (5行×2棋盤 + 顶栏≈1行 + 底部≈2行) = vh / 13
+     但不超过 420px宽 / 8列，取两者较小值保证格子始终正方形 */
+  --cell: min(calc(min(100vw, 420px) / 8), calc(100vh / 14.5));
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -456,24 +459,22 @@ const dragRangeStyle = computed(() => {
 
 /* ── 战场区（上下两半） ── */
 .section {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
+  flex-shrink: 0;
 }
 
 /* ── 棋盘容器 ── */
 .grid-wrap {
-  flex: 1;
   position: relative;
-  min-height: 0;
+  width: 100%;
+  height: calc(var(--cell) * 5);
+  overflow: hidden;
 }
 
 /* ── 棋盘格子 ── */
 .board-grid {
   display: grid;
-  grid-template-columns: repeat(v-bind('GAME_CONFIG.BOARD_COLS'), 1fr);
-  grid-template-rows: repeat(v-bind('GAME_CONFIG.BOARD_ROWS'), 1fr);
+  grid-template-columns: repeat(v-bind('GAME_CONFIG.BOARD_COLS'), var(--cell));
+  grid-template-rows: repeat(v-bind('GAME_CONFIG.BOARD_ROWS'), var(--cell));
   width: 100%;
   height: 100%;
 }
