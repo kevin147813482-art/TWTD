@@ -423,9 +423,9 @@ const dragRangeStyle = computed(() => {
 <style scoped>
 /* ── 整体布局 ── */
 .game-board {
-  /* cell = 可用高度 / (5行×2棋盤 + 顶栏≈1行 + 底部≈2行) = vh / 13
-     但不超过 420px宽 / 8列，取两者较小值保证格子始终正方形 */
-  --cell: min(calc(min(100vw, 420px) / 8), calc(100vh / 14.5));
+  /* 棋盤佔螢幕高約55%（5行×2 = 10行），底部操作區佔約38%，頂欄7%
+     cell 取「寬/8」和「5.5vh」兩者較小值，保持格子正方形 */
+  --cell: min(calc(min(100vw, 420px) / 8), 5.5vh);
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -459,15 +459,16 @@ const dragRangeStyle = computed(() => {
 
 /* ── 战场区（上下两半） ── */
 .section {
+  display: flex;
+  justify-content: center;  /* 棋盤水平居中 */
   flex-shrink: 0;
 }
 
-/* ── 棋盘容器 ── */
+/* ── 棋盘容器：必须与棋盘格子完全同尺寸，enemy-layer 百分比才正确 ── */
 .grid-wrap {
   position: relative;
-  width: 100%;
+  width: calc(var(--cell) * 8);
   height: calc(var(--cell) * 5);
-  overflow: hidden;
 }
 
 /* ── 棋盘格子 ── */
@@ -475,8 +476,6 @@ const dragRangeStyle = computed(() => {
   display: grid;
   grid-template-columns: repeat(v-bind('GAME_CONFIG.BOARD_COLS'), var(--cell));
   grid-template-rows: repeat(v-bind('GAME_CONFIG.BOARD_ROWS'), var(--cell));
-  width: 100%;
-  height: 100%;
 }
 
 .cell {
@@ -777,14 +776,15 @@ const dragRangeStyle = computed(() => {
   flex-shrink: 0;
 }
 
-/* ══ 底部操作区 ══ */
+/* ══ 底部操作区：flex:1 吸收剩余空间，让底部占屏幕约35-40% ══ */
 .bottom-ui {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   background: rgba(0,0,0,0.7);
-  flex-shrink: 0;
-  padding: 5px 6px 6px;
-  gap: 4px;
+  flex: 1;
+  padding: 8px 10px 12px;
+  gap: 8px;
 }
 
 /* 手牌行 */
@@ -838,16 +838,17 @@ const dragRangeStyle = computed(() => {
 
 .card {
   flex: 1;
-  aspect-ratio: 0.75;
+  aspect-ratio: 0.72;
   background: #f5f0e0;
   border: 1.5px solid #bbb;
-  border-radius: 5px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: grab;
   position: relative;
-  min-height: 46px;
+  min-height: 60px;
+  max-height: 100px;
 }
 .card.empty { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.15); }
 .card.selected { border-color: #ffd700; background: #fff8d0; }
