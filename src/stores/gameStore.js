@@ -215,10 +215,13 @@ export const gameStore = reactive({
   spawnEnemy(key, side) {
     const type = ENEMY_TYPES[key]
     if (!type) return
+    // 每波 ×1.25 血量缩放
+    const waveMult = Math.pow(1.25, this.wave - 1)
+    const hp = Math.round(type.hp * waveMult)
     const list = side==='player' ? this.playerEnemies : this.aiEnemies
     list.push({
       id: ++this.enemyIdCounter,
-      key, ...type, hp:type.hp, maxHp:type.hp,
+      key, ...type, hp, maxHp: hp,
       pathProgress: 0, stunned: false, isBoss: false,
     })
   },

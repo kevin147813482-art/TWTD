@@ -182,14 +182,16 @@ function moveEnemies(delta) {
 
 // ─── 波次 ─────────────────────────────────────────────────────
 function getWaveEnemies(wave) {
-  const count = 3 + wave * 2
+  // 第1波3只，每波+1，最多20只
+  const count = Math.min(3 + (wave - 1), 20)
   return Array.from({ length: count }, (_, i) => {
     const r = Math.random()
     let key
-    if (wave<=3)      key = r<0.7?'匪':r<0.9?'赤':'共'
-    else if (wave<=8) key = r<0.4?'匪':r<0.65?'赤':r<0.85?'共':'寇'
-    else              key = r<0.25?'匪':r<0.5?'赤':r<0.75?'共':'寇'
-    return { key, delay: i * 1000 }
+    if (wave<=3)      key = r<0.8?'匪':r<0.95?'赤':'共'
+    else if (wave<=5) key = r<0.5?'匪':r<0.75?'赤':r<0.9?'共':'寇'
+    else if (wave<=8) key = r<0.3?'匪':r<0.55?'赤':r<0.8?'共':'寇'
+    else              key = r<0.15?'匪':r<0.4?'赤':r<0.7?'共':'寇'
+    return { key, delay: i * 1200 }
   })
 }
 
