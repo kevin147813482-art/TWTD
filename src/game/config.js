@@ -82,7 +82,7 @@ export const GENERALS = {
 
 // 敌军小兵
 export const ENEMY_TYPES = {
-  匪: { key:'匪', name:'普通共匪', hp:10, speed:1.0, atk:1, weight:40 },
+  匪: { key:'匪', name:'普通共匪', hp:9,  speed:1.0, atk:1, weight:40 },
   共: { key:'共', name:'精英共軍', hp:25, speed:1.3, atk:1, weight:25 },
   赤: { key:'赤', name:'赤衛隊',   hp:6,  speed:1.8, atk:1, weight:25 },
   寇: { key:'寇', name:'重裝共寇', hp:50, speed:0.5, atk:1, weight:10 },

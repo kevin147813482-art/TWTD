@@ -127,7 +127,12 @@ function processAttacks(board, enemies, side, now) {
       if (type === 'pierce') {
         targets.forEach(t => { spawnProjectile(unit, t, isAI); gameStore.damageEnemy(side, t.id, atk) })
       } else if (type === 'area') {
-        targets.forEach(t => { spawnProjectile(unit, t, isAI); gameStore.damageEnemy(side, t.id, atk*0.7) })
+        // 主目标（最靠近蔣的）满伤害，其余溅射×0.5
+        const primary = targets.reduce((a,b) => a.pathProgress>b.pathProgress ? a : b)
+        targets.forEach(t => {
+          spawnProjectile(unit, t, isAI)
+          gameStore.damageEnemy(side, t.id, t === primary ? atk : atk * 0.5)
+        })
       } else {
         const t = targets.reduce((a,b) => a.pathProgress>b.pathProgress ? a : b)
         spawnProjectile(unit, t, isAI)
