@@ -28,6 +28,23 @@ export function getEnemyStyle(progress, isAI) {
   }
 }
 
+function getProjKind(unit) {
+  const key = unit.key
+  if (key === '炮') return 'shell'
+  if (key === '槍') return 'bullet'
+  if (unit.type === 'general') return 'arrow'
+  return 'slash'
+}
+
+function spawnProjectile(unit, target, isAI) {
+  const sx = `${(unit.col + 0.5) / COLS * 100}%`
+  const sy = `${(unit.row + 0.5) / ROWS * 100}%`
+  const ep = getEnemyStyle(target.pathProgress, isAI)
+  const side = isAI ? 'ai' : 'player'
+  const kind = getProjKind(unit)
+  gameStore.spawnProjectile(sx, sy, ep.left, ep.top, kind, side)
+}
+
 // ─── 塔攻击判定 ───────────────────────────────────────────────
 // 防御塔在地块格上，攻击相邻路线格上的敌军
 // 判断：敌军所在路线格 vs 塔的位置，距离是否在射程内
@@ -97,12 +114,12 @@ function processAttacks(board, enemies, side, now) {
       const type = getAttackType(unit)
 
       if (type === 'pierce') {
-        targets.forEach(t => gameStore.damageEnemy(side, t.id, atk))
+        targets.forEach(t => { spawnProjectile(unit, t, isAI); gameStore.damageEnemy(side, t.id, atk) })
       } else if (type === 'area') {
-        targets.forEach(t => gameStore.damageEnemy(side, t.id, atk*0.7))
+        targets.forEach(t => { spawnProjectile(unit, t, isAI); gameStore.damageEnemy(side, t.id, atk*0.7) })
       } else {
-        // single：打进度最大的（最靠近蔣的）
         const t = targets.reduce((a,b) => a.pathProgress>b.pathProgress ? a : b)
+        spawnProjectile(unit, t, isAI)
         gameStore.damageEnemy(side, t.id, atk)
       }
 

@@ -65,6 +65,7 @@ export const gameStore = reactive({
   wave: 1,
   bossWarning: false,
   enemyIdCounter: 0,
+  projectiles: [],
 
   playerBoard: createBoard(false),
   playerJiangHp: GAME_CONFIG.JIANG_INITIAL_HP,
@@ -201,6 +202,15 @@ export const gameStore = reactive({
       key, ...type, hp:type.hp, maxHp:type.hp,
       pathProgress: 0, stunned: false, isBoss: false,
     })
+  },
+
+  spawnProjectile(sx, sy, ex, ey, kind, side) {
+    const id = ++this.enemyIdCounter + Math.random()
+    this.projectiles.push({ id, sx, sy, ex, ey, kind, side })
+    setTimeout(() => {
+      const i = this.projectiles.findIndex(p => p.id === id)
+      if (i !== -1) this.projectiles.splice(i, 1)
+    }, 380)
   },
 
   nextWave() { this.wave++ },

@@ -49,6 +49,15 @@
             </div>
           </template>
         </div>
+        <!-- AI 投射物 -->
+        <div class="enemy-layer">
+          <div v-for="p in store.projectiles.filter(p=>p.side==='ai')" :key="p.id"
+            class="projectile"
+            :class="`proj-${p.kind}`"
+            :style="{ '--sx':p.sx,'--sy':p.sy,'--ex':p.ex,'--ey':p.ey }">
+            {{ p.kind==='shell'?'●':p.kind==='bullet'?'·':p.kind==='arrow'?'→':'✦' }}
+          </div>
+        </div>
         <!-- AI 敌军 -->
         <div class="enemy-layer">
           <div v-for="e in store.aiEnemies" :key="e.id"
@@ -113,6 +122,15 @@
               <div v-else-if="cell.kind === 'locked'" class="lock-plus">+</div>
             </div>
           </template>
+        </div>
+        <!-- 玩家投射物 -->
+        <div class="enemy-layer">
+          <div v-for="p in store.projectiles.filter(p=>p.side==='player')" :key="p.id"
+            class="projectile"
+            :class="`proj-${p.kind}`"
+            :style="{ '--sx':p.sx,'--sy':p.sy,'--ex':p.ex,'--ey':p.ey }">
+            {{ p.kind==='shell'?'●':p.kind==='bullet'?'·':p.kind==='arrow'?'→':'✦' }}
+          </div>
         </div>
         <!-- 玩家敌军 -->
         <div class="enemy-layer">
@@ -449,6 +467,19 @@ function onGetShovel() {
   transition: border-color 0.1s, transform 0.1s;
 }
 .unit.atk { border-color: #ff5722; transform: scale(1.1); }
+.unit.atk::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 4px;
+  background: radial-gradient(circle, rgba(255,100,0,0.5) 0%, transparent 70%);
+  animation: meleeFlash 0.2s ease-out forwards;
+  pointer-events: none;
+}
+@keyframes meleeFlash {
+  0%   { opacity: 1; transform: scale(0.8); }
+  100% { opacity: 0; transform: scale(1.6); }
+}
 .unit.ut-general {
   border-color: #c8960c;
   background: linear-gradient(135deg, #fff8e1, #ffecb3);
@@ -489,6 +520,29 @@ function onGetShovel() {
   transition: left 0.06s linear, top 0.06s linear;
 }
 .enemy.boss { width:34px; height:34px; font-size:1.1rem; background:rgba(255,200,200,0.92); }
+
+/* ── 投射物动画 ── */
+.projectile {
+  position: absolute;
+  left: var(--sx);
+  top:  var(--sy);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  font-size: 0.85rem;
+  font-weight: bold;
+  z-index: 10;
+  animation: projFly 0.35s linear forwards;
+}
+@keyframes projFly {
+  0%   { left: var(--sx); top: var(--sy); opacity: 1;   transform: translate(-50%,-50%) scale(1); }
+  80%  { opacity: 1; }
+  100% { left: var(--ex); top: var(--ey); opacity: 0.2; transform: translate(-50%,-50%) scale(0.6); }
+}
+
+.proj-bullet { color: #ffeb3b; font-size: 1rem; }
+.proj-shell  { color: #ff6f00; font-size: 1.1rem; }
+.proj-arrow  { color: #8d6e63; font-size: 1rem; }
+.proj-slash  { color: rgba(255,80,0,0.8); font-size: 1.2rem; }
 
 .ehp {
   position: absolute;
