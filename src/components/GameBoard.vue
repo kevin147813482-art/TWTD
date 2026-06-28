@@ -82,6 +82,10 @@
             {{ e.key }}
           </div>
         </div>
+        <!-- AI 危险警告 -->
+        <transition name="danger-fade">
+          <div v-if="store.aiDanger" class="danger-overlay">危</div>
+        </transition>
       </div>
     </div>
 
@@ -167,6 +171,10 @@
             {{ e.key }}
           </div>
         </div>
+        <!-- 玩家 危险警告 -->
+        <transition name="danger-fade">
+          <div v-if="store.playerDanger" class="danger-overlay">危</div>
+        </transition>
       </div>
     </div>
 
@@ -601,6 +609,27 @@ function onGetShovel() {
 }
 .player-walker .walker-char { color: #ffd700; }
 .ai-walker .walker-char     { color: #7cb8e0; }
+
+/* ── 危险警告 ── */
+.danger-overlay {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  font-size: 2.2rem;
+  font-weight: 900;
+  color: #ff1744;
+  text-shadow: 0 0 12px #ff1744, 0 0 4px #fff;
+  animation: dangerPulse 0.5s ease-in-out infinite alternate;
+  pointer-events: none;
+  z-index: 30;
+}
+@keyframes dangerPulse {
+  from { opacity: 0.7; transform: translateY(-50%) scale(0.9); }
+  to   { opacity: 1;   transform: translateY(-50%) scale(1.1); }
+}
+.danger-fade-enter-active, .danger-fade-leave-active { transition: opacity 0.3s; }
+.danger-fade-enter-from, .danger-fade-leave-to { opacity: 0; }
 
 /* ── 分割线 ── */
 .divider {

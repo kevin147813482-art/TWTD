@@ -130,13 +130,19 @@ function processAttacks(board, enemies, side, now) {
 }
 
 // ─── 敌军移动 ─────────────────────────────────────────────────
+const DANGER_THRESHOLD = PATH_LEN - 3  // last 3 cells trigger 危 warning
+
 function moveEnemies(delta) {
-  const spd = delta * 0.0015
+  const spd = delta * 0.0008
+
+  let playerDanger = false
+  let aiDanger = false
 
   for (let i=gameStore.playerEnemies.length-1; i>=0; i--) {
     const e = gameStore.playerEnemies[i]
     if (e.stunned) continue
     e.pathProgress += e.speed * spd
+    if (e.pathProgress >= DANGER_THRESHOLD) playerDanger = true
     if (e.pathProgress >= PATH_LEN) {
       gameStore.playerEnemies.splice(i,1)
       gameStore.damagePlayerJiang()
@@ -147,11 +153,15 @@ function moveEnemies(delta) {
     const e = gameStore.aiEnemies[i]
     if (e.stunned) continue
     e.pathProgress += e.speed * spd
+    if (e.pathProgress >= DANGER_THRESHOLD) aiDanger = true
     if (e.pathProgress >= PATH_LEN) {
       gameStore.aiEnemies.splice(i,1)
       gameStore.damageAIJiang()
     }
   }
+
+  gameStore.playerDanger = playerDanger
+  gameStore.aiDanger = aiDanger
 }
 
 // ─── 波次 ─────────────────────────────────────────────────────

@@ -54,19 +54,19 @@ export const GAME_CONFIG = {
 export const BASIC_UNITS = {
   步: {
     key: '步', name: '步兵',
-    attackType: 'single', atk: 3, atkSpeed: 1.75, range: 1, maxLevel: 5,
+    attackType: 'single', atk: 5, atkSpeed: 1.75, range: 1, maxLevel: 5,
   },
   炮: {
     key: '炮', name: '炮兵',
-    attackType: 'pierce', atk: 2, atkSpeed: 1.25, range: 3, maxLevel: 5,
+    attackType: 'pierce', atk: 4, atkSpeed: 1.25, range: 3, maxLevel: 5,
   },
   槍: {
     key: '槍', name: '機槍手',
-    attackType: 'single', atk: 2, atkSpeed: 2.0, range: 2, maxLevel: 5,
+    attackType: 'single', atk: 3, atkSpeed: 2.0, range: 2, maxLevel: 5,
   },
   坦: {
     key: '坦', name: '坦克',
-    attackType: 'area', atk: 2, atkSpeed: 1.25, range: 1, maxLevel: 5,
+    attackType: 'area', atk: 4, atkSpeed: 1.25, range: 1, maxLevel: 5,
   },
 }
 

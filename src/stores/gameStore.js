@@ -68,6 +68,8 @@ export const gameStore = reactive({
   projectiles: [],
   playerJiangProgress: 0,  // 准备阶段蔣沿路线行走进度
   aiJiangProgress: 0,
+  playerDanger: false,
+  aiDanger: false,
 
   playerBoard: createBoard(false),
   playerJiangHp: GAME_CONFIG.JIANG_INITIAL_HP,
@@ -104,6 +106,8 @@ export const gameStore = reactive({
     this.playerScore = 0
     this.playerJiangProgress = 0
     this.aiJiangProgress = 0
+    this.playerDanger = false
+    this.aiDanger = false
     this.aiBoard = createBoard(true)
     this.aiJiangHp = GAME_CONFIG.JIANG_INITIAL_HP
     this.aiJiangMaxHp = GAME_CONFIG.JIANG_INITIAL_HP
