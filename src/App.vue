@@ -1,7 +1,7 @@
 <template>
   <div class="app">
     <HomeScreen v-if="store.phase === 'home'" @start="startGame" />
-    <GameBoard v-else-if="store.phase === 'playing' || store.phase === 'paused'" />
+    <GameBoard v-else-if="store.phase === 'prep' || store.phase === 'playing' || store.phase === 'paused'" />
     <ResultScreen v-else-if="store.phase === 'victory' || store.phase === 'defeat'"
       :phase="store.phase"
       @restart="startGame"
