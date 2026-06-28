@@ -130,7 +130,10 @@
               </div>
               <!-- 单位 -->
               <div v-else-if="cell.unit" class="unit"
-                :class="[`ut-${cell.unit.type}`, { atk: cell.unit.attacking }]"
+                :class="[`ut-${cell.unit.type}`, { atk: cell.unit.attacking, dragging: boardDrag && boardDrag[0]===ri && boardDrag[1]===ci }]"
+                draggable="true"
+                @dragstart.stop="onBoardDragStart(ri, ci)"
+                @dragend.stop="boardDrag = null"
                 @click.stop="infoUnit = cell.unit">
                 {{ cell.unit.type === 'general_char' ? cell.unit.char : cell.unit.key }}
                 <span v-if="cell.unit.level > 1" class="lv">{{ cell.unit.level }}</span>
@@ -193,8 +196,10 @@
             class="card"
             :class="{ empty: !card, selected: selectedCard === i }"
             draggable="true"
-            @dragstart="dragging = i"
+            @dragstart="dragging = i; boardDrag = null"
             @dragend="dragging = null"
+            @dragover.prevent
+            @drop="onDropToHand(i)"
             @click="onCardClick(i)">
             <template v-if="card">
               <span class="card-char" :style="cardStyle(card)">{{ card.key }}</span>
@@ -246,7 +251,8 @@ import { BASIC_UNITS, GENERALS, GAME_CONFIG } from '../game/config.js'
 
 const ECOLOR = { 匪:'#555', 共:'#1a237e', 赤:'#c62828', 寇:'#4e342e' }
 
-const dragging     = ref(null)
+const dragging     = ref(null)   // 手牌index
+const boardDrag    = ref(null)   // [row, col] 棋盘单位拖动源
 const dragOver     = ref(null)
 const selectedCard = ref(null)
 const infoUnit     = ref(null)
@@ -293,14 +299,36 @@ function onCellClick(r, c) {
   selectedCard.value = null
 }
 
+function onBoardDragStart(r, c) {
+  boardDrag.value = [r, c]
+  dragging.value = null
+}
+
 function onDrop(r, c) {
   dragOver.value = null
+  // 棋盘单位拖到棋盘格
+  if (boardDrag.value) {
+    const [sr, sc] = boardDrag.value
+    if (sr === r && sc === c) { boardDrag.value = null; return }
+    store.moveOrMergeUnit(sr, sc, r, c)
+    boardDrag.value = null
+    return
+  }
+  // 手牌拖到棋盘格
   if (dragging.value === null) return
   const card = store.playerHand[dragging.value]
   if (!card) { dragging.value = null; return }
   if (card.type === 'shovel') store.openCell(dragging.value, r, c)
   else store.deployUnit(dragging.value, r, c)
   dragging.value = null
+}
+
+function onDropToHand(slotIndex) {
+  // 棋盘单位拖回手牌栏（退回为卡牌）
+  if (!boardDrag.value) return
+  const [r, c] = boardDrag.value
+  store.returnUnitToHand(r, c, slotIndex)
+  boardDrag.value = null
 }
 
 function onGetShovel() {
@@ -498,7 +526,8 @@ function onGetShovel() {
   position: relative;
   transition: border-color 0.1s, transform 0.1s;
 }
-.unit.atk { border-color: #ff5722; transform: scale(1.1); }
+.unit.atk      { border-color: #ff5722; transform: scale(1.1); }
+.unit.dragging { opacity: 0.4; border: 2px dashed #aaa; }
 .unit.atk::after {
   content: '';
   position: absolute;

@@ -221,6 +221,40 @@ export const gameStore = reactive({
     }, 380)
   },
 
+  moveOrMergeUnit(fromR, fromC, toR, toC) {
+    const fromCell = this.playerBoard[fromR][fromC]
+    const toCell   = this.playerBoard[toR][toC]
+    if (!fromCell.unit) return
+    if (toCell.kind !== 'unlocked') return
+    if (!toCell.unit) {
+      // 移动到空格
+      toCell.unit = { ...fromCell.unit, row: toR, col: toC }
+      fromCell.unit = null
+    } else {
+      // 合并：同兵种同等级
+      const a = fromCell.unit, b = toCell.unit
+      const maxLv = BASIC_UNITS[a.key]?.maxLevel || 5
+      if (a.type === b.type && a.key === b.key && a.level === b.level && a.level < maxLv) {
+        toCell.unit = { ...b, level: b.level + 1 }
+        fromCell.unit = null
+      }
+    }
+  },
+
+  returnUnitToHand(r, c, slotIndex) {
+    const cell = this.playerBoard[r][c]
+    if (!cell.unit) return
+    const unit = cell.unit
+    // 转回卡牌格式
+    const card = unit.type === 'general'
+      ? { type: 'general', key: unit.key, level: unit.level }
+      : unit.type === 'general_char'
+        ? { type: 'general_char', key: unit.key, generalKey: unit.generalKey, char: unit.char }
+        : { type: 'unit', key: unit.key, level: unit.level }
+    this.playerHand[slotIndex] = card
+    cell.unit = null
+  },
+
   nextWave() { this.wave++ },
   victory()  { this.phase = 'victory' },
 })
