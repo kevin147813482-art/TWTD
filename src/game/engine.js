@@ -53,12 +53,23 @@ function getUnitRange(unit) {
   if (unit.type === 'general') return GENERALS[unit.key]?.range || 2
   return BASIC_UNITS[unit.key]?.range || 1
 }
+// 等级乘数：Lv1→2 ×1.5, Lv2→3 ×1.4, Lv3→4 ×1.3, Lv4→5 ×1.2
+const LEVEL_FACTORS = [1, 1.5, 2.1, 2.73, 3.276]
+
+function getLevelFactor(level) {
+  return LEVEL_FACTORS[Math.min(level - 1, LEVEL_FACTORS.length - 1)]
+}
+
 function getUnitAtk(unit) {
   const base = unit.type==='general' ? (GENERALS[unit.key]?.atk||6) : (BASIC_UNITS[unit.key]?.atk||2)
-  return base + (unit.level-1)*1.5
+  if (unit.type === 'general') return base + (unit.level-1)*1.5
+  return base * getLevelFactor(unit.level)
 }
 function getUnitAtkSpeed(unit) {
-  return unit.type==='general' ? (GENERALS[unit.key]?.atkSpeed||1.5) : (BASIC_UNITS[unit.key]?.atkSpeed||1.5)
+  const baseAtk = unit.type==='general' ? (GENERALS[unit.key]?.atk||6) : (BASIC_UNITS[unit.key]?.atk||2)
+  const baseSpd = unit.type==='general' ? (GENERALS[unit.key]?.atkSpeed||1.5) : (BASIC_UNITS[unit.key]?.atkSpeed||1.25)
+  if (unit.type === 'general') return baseSpd
+  return baseSpd * getLevelFactor(unit.level)
 }
 function getAttackType(unit) {
   if (unit.type==='general') return GENERALS[unit.key]?.attackType||'single'
