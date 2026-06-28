@@ -251,6 +251,11 @@ export const gameStore = reactive({
       if (a.type === b.type && a.key === b.key && a.level === b.level && a.level < maxLv) {
         toCell.unit = { ...b, level: b.level + 1 }
         fromCell.unit = null
+      } else {
+        // 无法合成：互换位置
+        const tmp = { ...fromCell.unit, row: toR, col: toC }
+        fromCell.unit = { ...toCell.unit, row: fromR, col: fromC }
+        toCell.unit = tmp
       }
     }
   },
