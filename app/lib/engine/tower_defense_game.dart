@@ -552,9 +552,39 @@ class TowerDefenseGame extends FlameGame {
 
   // ── AI 行為 ──────────────────────────────────────────
 
+  // 是否有空格可以放牌
+  bool _aiHasVacant(GameUiState s) {
+    for (int r = 0; r < kRows; r++) {
+      for (int c = 0; c < kCols; c++) {
+        final cell = s.aiBoard[r][c];
+        if (cell.kind == CellKind.unlocked && cell.unit == null) return true;
+      }
+    }
+    return false;
+  }
+
+  // 嘗試手牌合并（同種同級基礎兵升一級），成功返回 true
+  bool _aiTryMergeHand() {
+    for (int i = 0; i < kHandSize; i++) {
+      final ci = _aiHand[i];
+      if (ci == null || ci.type == 'general_char') continue;
+      for (int j = i + 1; j < kHandSize; j++) {
+        final cj = _aiHand[j];
+        if (cj == null) continue;
+        if (ci.type == cj.type && ci.key == cj.key && ci.level == cj.level &&
+            ci.level < (kBasicUnits[ci.key]?.maxLevel ?? 5)) {
+          _aiHand[i] = ci.copyWith(level: ci.level + 1);
+          _aiHand[j] = null;
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   void _aiTick(double dtMs) {
     _aiTimerMs += dtMs;
-    // 操作間隔隨波次縮短，模擬難度遞增（wave 1 = 1.5~2.5s, wave 10+ = 0.8~1.5s）
+    // 操作間隔隨波次縮短（wave1=1.5~2.5s, wave10+=0.8~1.5s）
     final wave = notifier.state.wave;
     final minMs = max(800.0, 1500.0 - wave * 50.0);
     final maxMs = max(1500.0, 2500.0 - wave * 100.0);
@@ -566,34 +596,24 @@ class TowerDefenseGame extends FlameGame {
       final s = notifier.state;
       final cost = getRecruitCost(s.aiRecruitTimes);
 
-      // 棋盤是否有空格
-      bool hasVacant = false;
-      for (int r = 0; r < kRows && !hasVacant; r++) {
-        for (int c = 0; c < kCols && !hasVacant; c++) {
-          final cell = s.aiBoard[r][c];
-          if (cell.kind == CellKind.unlocked && cell.unit == null) hasVacant = true;
-        }
-      }
+      // Step 1: 手牌升級（合并同種同級）
+      if (_aiTryMergeHand()) return;
 
-      // 棋盤滿時：嘗試棋盤合并（不清手牌，保留等空格）
-      if (!hasVacant) {
-        notifier.aiMergeUnits();
-        return;
-      }
-
-      // 手牌有卡 → 放一張（模擬玩家逐張出牌）
-      if (_aiHasCards) {
+      // Step 2: 有空格且有手牌 → 放一張（含武將配對優先邏輯）
+      if (_aiHasCards && _aiHasVacant(s)) {
         _aiDeployOneCard();
         return;
       }
 
-      // 手牌空 → 嘗試棋盤合并，再看能否招募
-      notifier.aiMergeUnits();
+      // Step 3: 棋盤相鄰合并升級
+      if (notifier.aiMergeUnits()) return;
+
+      // Step 4: 上面都做不了 → 招募（清空舊手牌換新牌），需糧食夠
       if (s.aiFood >= cost) {
         notifier.aiRecruit();
-        _aiFillHand();
+        _aiFillHand(); // 新5張牌覆蓋舊手牌（含未出完的牌也丟棄）
       }
-      // 食物不夠就等，靠擊殺積累糧食
+      // 糧食不夠 → 等待，靠擊殺積累
     });
   }
 
@@ -620,27 +640,11 @@ class TowerDefenseGame extends FlameGame {
     });
   }
 
-  // 從手牌放一張（有智能優先級）
+  // 從手牌放一張（有智能優先級；手牌合并由 _aiTick Step1 已處理）
   void _aiDeployOneCard() {
     final s = notifier.state;
 
-    // 1. 先嘗試手牌合并：同種同級基礎兵 → 升級，free up slot
-    for (int i = 0; i < kHandSize; i++) {
-      final ci = _aiHand[i];
-      if (ci == null || ci.type == 'general_char') continue;
-      for (int j = i + 1; j < kHandSize; j++) {
-        final cj = _aiHand[j];
-        if (cj == null) continue;
-        if (ci.type == cj.type && ci.key == cj.key && ci.level == cj.level &&
-            ci.level < (kBasicUnits[ci.key]?.maxLevel ?? 5)) {
-          _aiHand[i] = ci.copyWith(level: ci.level + 1);
-          _aiHand[j] = null;
-          return; // 本輪只合一次
-        }
-      }
-    }
-
-    // 2. 選出最高優先度的牌
+    // 選出最高優先度的牌
     // 優先：武將字 chars[0]（好讓下輪 chars[1] 配對）
     int? pickIdx;
 
