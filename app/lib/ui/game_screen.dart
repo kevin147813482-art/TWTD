@@ -26,8 +26,9 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   Offset? _dragPos;
   ({int row, int col})? _hoverCell;
 
-  // 棋盤 tap-select：選中的格子
-  ({int row, int col})? _selectedBoardCell;
+  // 棋盤單位拖拽（board → board 移動）
+  ({int row, int col, Unit unit})? _draggingBoardUnit;
+  Offset? _boardDragPos;
 
   // 單位詳情彈窗
   Unit? _infoUnit;
@@ -73,8 +74,51 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     });
   }
 
-  void _clearBoardSelection() {
-    setState(() => _selectedBoardCell = null);
+  // ── 棋盤單位拖拽 ──────────────────────────────────────
+
+  void _handleBoardPanStart(Offset pos) {
+    if (_draggingHandIndex != null) return;
+    final hit = _game.hitTest(pos);
+    if (hit == null || hit.isAi) return;
+    final cell = ref.read(gameNotifierProvider).playerBoard[hit.row][hit.col];
+    if (cell.unit == null || cell.kind != CellKind.unlocked) return;
+    setState(() {
+      _draggingBoardUnit = (row: hit.row, col: hit.col, unit: cell.unit!);
+      _boardDragPos = pos;
+      _infoUnit = null;
+    });
+  }
+
+  void _handleBoardPanUpdate(Offset pos) {
+    if (_draggingBoardUnit == null) return;
+    final hit = _game.hitTest(pos);
+    final from = _draggingBoardUnit!;
+    setState(() {
+      _boardDragPos = pos;
+      _hoverCell = (hit != null && !hit.isAi &&
+              (hit.row != from.row || hit.col != from.col))
+          ? (row: hit.row, col: hit.col)
+          : null;
+    });
+  }
+
+  void _handleBoardPanEnd() {
+    if (_draggingBoardUnit == null) return;
+    final from = _draggingBoardUnit!;
+    final dropPos = _boardDragPos;
+    if (dropPos != null) {
+      final hit = _game.hitTest(dropPos);
+      if (hit != null && !hit.isAi &&
+          (hit.row != from.row || hit.col != from.col)) {
+        ref.read(gameNotifierProvider.notifier)
+            .moveOrMergeUnit(from.row, from.col, hit.row, hit.col);
+      }
+    }
+    setState(() {
+      _draggingBoardUnit = null;
+      _boardDragPos = null;
+      _hoverCell = null;
+    });
   }
 
   // 根據螢幕座標找手牌槽索引（找不到返回 null）
@@ -133,6 +177,9 @@ class _GameScreenState extends ConsumerState<GameScreen> {
             },
             builder: (ctx, candidateData, rejectedData) => GestureDetector(
               onTapUp: (d) => _handleTap(d.localPosition),
+              onPanStart: (d) => _handleBoardPanStart(d.localPosition),
+              onPanUpdate: (d) => _handleBoardPanUpdate(d.localPosition),
+              onPanEnd: (_) => _handleBoardPanEnd(),
               child: GameWidget(
                 game: _game,
                 overlayBuilderMap: {
@@ -162,7 +209,8 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                   hoverCell: _hoverCell,
                   card: _draggingCard,
                   board: s.playerBoard,
-                  selectedCell: _selectedBoardCell,
+                  boardDragUnit: _draggingBoardUnit,
+                  boardDragPos: _boardDragPos,
                 ),
               ),
             ),
@@ -184,6 +232,8 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   }
 
   void _handleTap(Offset pos) {
+    // 棋盤拖拽期間 pan 已贏得手勢 arena，不走 tap 路徑
+    if (_draggingBoardUnit != null) return;
     // 清除詳情彈窗
     if (_infoUnit != null) {
       setState(() => _infoUnit = null);
@@ -199,39 +249,12 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       _clearDrag();
       return;
     }
-
+    // 短按棋盤格子 → 顯示單位詳情（移動請用拖拽）
     final hit = _game.hitTest(pos);
-
-    // 已有選中格子：第二次點擊決定目標
-    if (_selectedBoardCell != null) {
-      final sel = _selectedBoardCell!;
-      if (hit != null && !hit.isAi) {
-        if (hit.row == sel.row && hit.col == sel.col) {
-          // 點擊同格 → 取消選中，顯示詳情
-          final s = ref.read(gameNotifierProvider);
-          final cell = s.playerBoard[sel.row][sel.col];
-          setState(() {
-            _selectedBoardCell = null;
-            _infoUnit = cell.unit;
-          });
-        } else {
-          // 點擊其他格 → 移動/交換
-          ref.read(gameNotifierProvider.notifier)
-              .moveOrMergeUnit(sel.row, sel.col, hit.row, hit.col);
-          _clearBoardSelection();
-        }
-      } else {
-        _clearBoardSelection();
-      }
-      return;
-    }
-
-    // 點擊有單位的格子 → 選中（顯示青色外框）
     if (hit != null && !hit.isAi) {
-      final s = ref.read(gameNotifierProvider);
-      final cell = s.playerBoard[hit.row][hit.col];
-      if (cell.unit != null && cell.kind == CellKind.unlocked) {
-        setState(() => _selectedBoardCell = (row: hit.row, col: hit.col));
+      final cell = ref.read(gameNotifierProvider).playerBoard[hit.row][hit.col];
+      if (cell.unit != null) {
+        setState(() => _infoUnit = cell.unit);
       }
     }
   }
@@ -242,9 +265,10 @@ class _DragOverlayPainter extends CustomPainter {
   final TowerDefenseGame game;
   final Offset? cardSourcePos;
   final ({int row, int col})? hoverCell;
-  final ({int row, int col})? selectedCell;
   final HandCard? card;
   final List<List<Cell>> board;
+  final ({int row, int col, Unit unit})? boardDragUnit;
+  final Offset? boardDragPos;
 
   _DragOverlayPainter({
     required this.game,
@@ -252,7 +276,8 @@ class _DragOverlayPainter extends CustomPainter {
     required this.hoverCell,
     required this.card,
     required this.board,
-    this.selectedCell,
+    this.boardDragUnit,
+    this.boardDragPos,
   });
 
   @override
@@ -261,17 +286,35 @@ class _DragOverlayPainter extends CustomPainter {
     final bx = game.boardOffsetX;
     final by = game.playerBoardY;
 
-    // 棋盤選中格：青色外框 + 淡藍填充
-    if (selectedCell != null) {
-      final sr = Rect.fromLTWH(
-          bx + selectedCell!.col * cs, by + selectedCell!.row * cs, cs, cs);
-      canvas.drawRect(sr,
-          Paint()..color = const Color(0x3300E5FF));
-      canvas.drawRect(sr,
-          Paint()
-            ..color = const Color(0xCC00E5FF)
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 2.5);
+    // 棋盤單位拖拽：來源格半透明遮罩 + 手指位置幽靈卡
+    if (boardDragUnit != null && boardDragPos != null) {
+      // 來源格暗化
+      final srcRect = Rect.fromLTWH(
+        bx + boardDragUnit!.col * cs, by + boardDragUnit!.row * cs, cs, cs);
+      canvas.drawRect(srcRect, Paint()..color = const Color(0x88000000));
+
+      // 幽靈卡（跟著手指）
+      final ghostW = cs * 0.82;
+      final ghostH = cs * 1.1;
+      final ghostRect = Rect.fromCenter(
+          center: boardDragPos!, width: ghostW, height: ghostH);
+      final rr = RRect.fromRectAndRadius(ghostRect, const Radius.circular(6));
+      canvas.drawRRect(rr, Paint()..color = const Color(0xCC1a3a1a));
+      canvas.drawRRect(rr, Paint()
+        ..color = const Color(0xFF4CAF50)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5);
+      // 幽靈卡文字
+      final tp = TextPainter(
+        text: TextSpan(
+          text: boardDragUnit!.unit.key,
+          style: const TextStyle(
+              color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas,
+          boardDragPos! - Offset(tp.width / 2, tp.height / 2));
     }
 
     // 鏟子拖動：鎖定格橘色高亮
@@ -368,7 +411,8 @@ class _DragOverlayPainter extends CustomPainter {
   @override
   bool shouldRepaint(_DragOverlayPainter old) =>
       cardSourcePos != old.cardSourcePos || hoverCell != old.hoverCell ||
-      card != old.card || selectedCell != old.selectedCell;
+      card != old.card || boardDragUnit != old.boardDragUnit ||
+      boardDragPos != old.boardDragPos;
 }
 
 // ── 單位詳情彈窗 ──────────────────────────────────────
