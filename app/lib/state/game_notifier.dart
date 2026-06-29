@@ -245,17 +245,43 @@ class GameNotifier extends StateNotifier<GameUiState> {
     state = state.copyWith(playerBoard: newBoard);
   }
 
+  // 棋盤單位拖回手牌：空格→返回；同種同級→合并；其他→交換
   void returnUnitToHand(int row, int col, int slotIndex) {
     final board = state.playerBoard;
     final cell = board[row][col];
     if (cell.unit == null) return;
-    final existingCard = state.playerHand[slotIndex];
-    if (existingCard != null) return; // 目標格有牌
 
-    final newHand = List<HandCard?>.from(state.playerHand);
-    newHand[slotIndex] = cell.unit!.toHandCard();
+    final movingUnit = cell.unit!;
+    final existingCard = state.playerHand[slotIndex];
     final newBoard = _copyBoard(board);
-    newBoard[row][col] = cell.copyWith(clearUnit: true);
+    final newHand = List<HandCard?>.from(state.playerHand);
+
+    if (existingCard == null) {
+      // 空格：直接放回
+      newHand[slotIndex] = movingUnit.toHandCard();
+      newBoard[row][col] = cell.copyWith(clearUnit: true);
+    } else if (movingUnit.type != 'general_char' &&
+               existingCard.type != 'general_char' &&
+               existingCard.type != 'shovel' &&
+               existingCard.key == movingUnit.key &&
+               existingCard.type == movingUnit.type &&
+               existingCard.level == movingUnit.level &&
+               existingCard.level < (kBasicUnits[existingCard.key]?.maxLevel ?? 5)) {
+      // 同種同級：合并升一級
+      newHand[slotIndex] = existingCard.copyWith(level: existingCard.level + 1);
+      newBoard[row][col] = cell.copyWith(clearUnit: true);
+    } else {
+      // 其他：交換（手牌→棋盤，棋盤→手牌）
+      newHand[slotIndex] = movingUnit.toHandCard();
+      newBoard[row][col] = cell.copyWith(
+        unit: Unit(
+          id: _uid('pu'), type: existingCard.type, key: existingCard.key,
+          level: existingCard.level, row: row, col: col,
+          generalKey: existingCard.generalKey, charStr: existingCard.charStr,
+        ),
+      );
+    }
+
     state = state.copyWith(playerBoard: newBoard, playerHand: newHand);
   }
 

@@ -107,11 +107,22 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     final from = _draggingBoardUnit!;
     final dropPos = _boardDragPos;
     if (dropPos != null) {
-      final hit = _game.hitTest(dropPos);
-      if (hit != null && !hit.isAi &&
-          (hit.row != from.row || hit.col != from.col)) {
-        ref.read(gameNotifierProvider.notifier)
-            .moveOrMergeUnit(from.row, from.col, hit.row, hit.col);
+      final sz = MediaQuery.of(context).size;
+      // 落點在手牌區 → 拖回手牌（空格/交換/合并）
+      if (dropPos.dy > sz.height - 180) {
+        final slotIndex = _findHandSlot(dropPos, sz);
+        if (slotIndex != null) {
+          ref.read(gameNotifierProvider.notifier)
+              .returnUnitToHand(from.row, from.col, slotIndex);
+        }
+      } else {
+        // 落點在棋盤 → 移動或合并
+        final hit = _game.hitTest(dropPos);
+        if (hit != null && !hit.isAi &&
+            (hit.row != from.row || hit.col != from.col)) {
+          ref.read(gameNotifierProvider.notifier)
+              .moveOrMergeUnit(from.row, from.col, hit.row, hit.col);
+        }
       }
     }
     setState(() {
