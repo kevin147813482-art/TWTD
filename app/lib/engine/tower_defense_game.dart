@@ -554,43 +554,68 @@ class TowerDefenseGame extends FlameGame {
 
   void _aiTick(double dtMs) {
     _aiTimerMs += dtMs;
-    // 每 0.8~2 秒行動一次，模擬玩家節奏
-    final interval = 800 + _rng.nextDouble() * 1200;
+    // 操作間隔隨波次縮短，模擬難度遞增（wave 1 = 1.5~2.5s, wave 10+ = 0.8~1.5s）
+    final wave = notifier.state.wave;
+    final minMs = max(800.0, 1500.0 - wave * 50.0);
+    final maxMs = max(1500.0, 2500.0 - wave * 100.0);
+    final interval = minMs + _rng.nextDouble() * (maxMs - minMs);
     if (_aiTimerMs < interval) return;
     _aiTimerMs = 0;
 
     _postFrame(() {
-      // 優先 1：手牌有卡 → 放一張（模擬玩家逐張出牌）
+      final s = notifier.state;
+      final cost = getRecruitCost(s.aiRecruitTimes);
+
+      // 棋盤是否有空格
+      bool hasVacant = false;
+      for (int r = 0; r < kRows && !hasVacant; r++) {
+        for (int c = 0; c < kCols && !hasVacant; c++) {
+          final cell = s.aiBoard[r][c];
+          if (cell.kind == CellKind.unlocked && cell.unit == null) hasVacant = true;
+        }
+      }
+
+      // 棋盤滿時：嘗試棋盤合并（不清手牌，保留等空格）
+      if (!hasVacant) {
+        notifier.aiMergeUnits();
+        return;
+      }
+
+      // 手牌有卡 → 放一張（模擬玩家逐張出牌）
       if (_aiHasCards) {
         _aiDeployOneCard();
         return;
       }
-      // 優先 2：嘗試合并棋盤相鄰同種同級單位
-      if (_rng.nextDouble() < 0.35 && notifier.aiMergeUnits()) return;
-      // 優先 3：糧食夠 → 招募，填滿手牌
-      final cost = getRecruitCost(notifier.state.aiRecruitTimes);
-      if (notifier.state.aiFood >= cost) {
+
+      // 手牌空 → 嘗試棋盤合并，再看能否招募
+      notifier.aiMergeUnits();
+      if (s.aiFood >= cost) {
         notifier.aiRecruit();
         _aiFillHand();
       }
+      // 食物不夠就等，靠擊殺積累糧食
     });
   }
 
-  // 填 AI 手牌（與玩家相同分布，去掉鏟子）
+  // 填 AI 手牌（概率完全對齊玩家；鏟子改抽基礎兵，AI無法使用鏟子）
   void _aiFillHand() {
     final wave = notifier.state.wave;
-    final generalChance = (0.15 + wave * 0.01).clamp(0.0, 0.20);
+    final generalChance = min(0.15 + wave * 0.01, 0.20);
+    const shovelChance = 0.06;
+    final basicKeys = kBasicUnits.keys.toList();
+    final gKeys = kGenerals.keys.toList();
     _aiHand = List.generate(kHandSize, (_) {
       final r = _rng.nextDouble();
       if (r < generalChance) {
-        final gKeys = kGenerals.keys.toList();
         final gKey = gKeys[_rng.nextInt(gKeys.length)];
         final g = kGenerals[gKey]!;
         final char = g.chars[_rng.nextInt(g.chars.length)];
         return HandCard(type: 'general_char', key: char, generalKey: gKey, charStr: char);
+      } else if (r < generalChance + shovelChance) {
+        // 鏟子 → 換成基礎兵（AI不用鏟子，但保持總概率分布一致）
+        return HandCard(type: 'unit', key: basicKeys[_rng.nextInt(basicKeys.length)]);
       } else {
-        final keys = kBasicUnits.keys.toList();
-        return HandCard(type: 'unit', key: keys[_rng.nextInt(keys.length)]);
+        return HandCard(type: 'unit', key: basicKeys[_rng.nextInt(basicKeys.length)]);
       }
     });
   }
@@ -678,11 +703,7 @@ class TowerDefenseGame extends FlameGame {
         }
       }
     }
-    if (vacant.isEmpty) {
-      // 棋盤滿 → 嘗試升級再試
-      notifier.aiMergeUnits();
-      return;
-    }
+    if (vacant.isEmpty) return; // 棋盤滿由 _aiTick 上層處理
 
     List<int> bestPos;
 
@@ -721,11 +742,19 @@ class TowerDefenseGame extends FlameGame {
             (near.isNotEmpty ? near : vacant).length)];
       }
     } else {
-      // 普通兵：靠近 AI 路線（AI路線：右列→底行→左列，close cols = kCols-2, rows = kRows-2）
-      final near = vacant.where((p) =>
-          p[1] == kCols - 2 || p[0] == kRows - 2 || p[1] == 1).toList();
-      bestPos = (near.isNotEmpty ? near : vacant)[_rng.nextInt(
-          (near.isNotEmpty ? near : vacant).length)];
+      // 普通兵：靠近路線的格優先
+      // 早期波次（wave<=3）有 40% 概率隨機放（模仿新手玩家不總是最優）
+      // 後期波次降到 0%，全部策略性放置
+      final wave = notifier.state.wave;
+      final randomChance = max(0.0, 0.40 - wave * 0.06);
+      if (_rng.nextDouble() < randomChance) {
+        bestPos = vacant[_rng.nextInt(vacant.length)];
+      } else {
+        final near = vacant.where((p) =>
+            p[1] == kCols - 2 || p[0] == kRows - 2 || p[1] == 1).toList();
+        bestPos = (near.isNotEmpty ? near : vacant)[_rng.nextInt(
+            (near.isNotEmpty ? near : vacant).length)];
+      }
     }
 
     notifier.aiDeployUnit(
