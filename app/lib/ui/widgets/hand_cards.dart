@@ -19,10 +19,12 @@ class HandAreaOverlay extends ConsumerStatefulWidget {
 }
 
 class _HandAreaOverlayState extends ConsumerState<HandAreaOverlay>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   int _prevRecruitVersion = -1;
   bool _animating = false;
+  bool _prevCanRecruit = false;
   late final AnimationController _ctrl;
+  late final AnimationController _flashCtrl;
 
   @override
   void initState() {
@@ -36,11 +38,16 @@ class _HandAreaOverlayState extends ConsumerState<HandAreaOverlay>
         setState(() => _animating = false);
       }
     });
+    _flashCtrl = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
   }
 
   @override
   void dispose() {
     _ctrl.dispose();
+    _flashCtrl.dispose();
     super.dispose();
   }
 
@@ -57,11 +64,23 @@ class _HandAreaOverlayState extends ConsumerState<HandAreaOverlay>
       }
     }
 
+    // 征兵按鈕閃爍：糧食夠時脈動提示
+    final canRecruit = s.canPlayerRecruit;
+    if (canRecruit != _prevCanRecruit) {
+      _prevCanRecruit = canRecruit;
+      if (canRecruit) {
+        _flashCtrl.repeat(reverse: true);
+      } else {
+        _flashCtrl.stop();
+        _flashCtrl.value = 0;
+      }
+    }
+
     return Column(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
         // 行動按鈕列
-        _ActionRow(s: s),
+        _ActionRow(s: s, flashAnim: _flashCtrl),
         const SizedBox(height: 4),
         // 手牌列
         SizedBox(
@@ -88,7 +107,8 @@ class _HandAreaOverlayState extends ConsumerState<HandAreaOverlay>
 
 class _ActionRow extends ConsumerWidget {
   final GameUiState s;
-  const _ActionRow({required this.s});
+  final Animation<double> flashAnim;
+  const _ActionRow({required this.s, required this.flashAnim});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -101,26 +121,48 @@ class _ActionRow extends ConsumerWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // 招募按鈕
+          // 招募按鈕（可招募時邊框脈動 + 光暈）
           GestureDetector(
             onTap: canRecruit ? notifier.playerRecruit : null,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: canRecruit ? const Color(0xFF2e7d32) : const Color(0xFF424242),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: canRecruit ? const Color(0xFF66BB6A) : const Color(0xFF757575),
-                ),
-              ),
-              child: Text(
-                '征兵 🍞$cost',
-                style: TextStyle(
-                  color: canRecruit ? Colors.white : const Color(0xFFAAAAAA),
-                  fontSize: 13, fontWeight: FontWeight.bold,
-                ),
-              ),
+            child: AnimatedBuilder(
+              animation: flashAnim,
+              builder: (ctx, _) {
+                final t = canRecruit ? flashAnim.value : 0.0;
+                return Container(
+                  decoration: canRecruit ? BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Color.lerp(Colors.transparent,
+                            const Color(0xFF66FF66), t)!,
+                        blurRadius: 8 + t * 6,
+                        spreadRadius: t * 2,
+                      ),
+                    ],
+                  ) : null,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: canRecruit ? const Color(0xFF2e7d32) : const Color(0xFF424242),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: canRecruit
+                            ? Color.lerp(const Color(0xFF66BB6A),
+                                const Color(0xFF00FF77), t)!
+                            : const Color(0xFF757575),
+                        width: canRecruit ? 1.5 + t * 1.0 : 1.0,
+                      ),
+                    ),
+                    child: Text(
+                      '征兵 🍞$cost',
+                      style: TextStyle(
+                        color: canRecruit ? Colors.white : const Color(0xFFAAAAAA),
+                        fontSize: 13, fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
           ),
           // 鏟子按鈕

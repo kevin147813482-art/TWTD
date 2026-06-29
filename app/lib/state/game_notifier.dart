@@ -303,14 +303,18 @@ class GameNotifier extends StateNotifier<GameUiState> {
 
   // ── AI 操作（由引擎調用） ────────────────────────────
 
-  void aiDeployUnit(String key, int row, int col, {int level = 1}) {
+  void aiDeployUnit(String key, int row, int col, {
+    int level = 1, String type = 'unit',
+    String? generalKey, String? charStr,
+  }) {
     final board = state.aiBoard;
     final cell = board[row][col];
     if (cell.kind != CellKind.unlocked || cell.unit != null) return;
 
     final unit = Unit(
-      id: _uid('au'), type: 'unit', key: key,
+      id: _uid('au'), type: type, key: key,
       level: level, row: row, col: col,
+      generalKey: generalKey, charStr: charStr,
     );
     final newBoard = _copyBoard(board);
     newBoard[row][col] = cell.copyWith(unit: unit);

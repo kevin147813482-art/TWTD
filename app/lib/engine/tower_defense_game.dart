@@ -85,8 +85,10 @@ class TowerDefenseGame extends FlameGame {
   int _spawnedThisWave  = 0;
   bool _wavePending     = false;
 
-  // AI 計時
+  // AI 計時 + 手牌（引擎內部，不顯示在 UI）
   double _aiTimerMs = 0;
+  List<HandCard?> _aiHand = List.filled(kHandSize, null);
+  bool get _aiHasCards => _aiHand.any((c) => c != null);
   final _rng = Random();
   int _idCounter = 0;
   String _uid(String p) => '${p}_${++_idCounter}';
@@ -552,25 +554,121 @@ class TowerDefenseGame extends FlameGame {
 
   void _aiTick(double dtMs) {
     _aiTimerMs += dtMs;
+    // 每 0.8~2 秒行動一次，模擬玩家節奏
     final interval = 800 + _rng.nextDouble() * 1200;
     if (_aiTimerMs < interval) return;
     _aiTimerMs = 0;
 
-    final s = notifier.state;
-
-    // 有牌就偶爾先嘗試合併，再放牌
     _postFrame(() {
-      if (_rng.nextDouble() < 0.15 && notifier.aiMergeUnits()) return;
+      // 優先 1：手牌有卡 → 放一張（模擬玩家逐張出牌）
+      if (_aiHasCards) {
+        _aiDeployOneCard();
+        return;
+      }
+      // 優先 2：嘗試合并棋盤相鄰同種同級單位
+      if (_rng.nextDouble() < 0.35 && notifier.aiMergeUnits()) return;
+      // 優先 3：糧食夠 → 招募，填滿手牌
       final cost = getRecruitCost(notifier.state.aiRecruitTimes);
       if (notifier.state.aiFood >= cost) {
         notifier.aiRecruit();
-        _aiDeploy();
+        _aiFillHand();
       }
     });
   }
 
-  void _aiDeploy() {
+  // 填 AI 手牌（與玩家相同分布，去掉鏟子）
+  void _aiFillHand() {
+    final wave = notifier.state.wave;
+    final generalChance = (0.15 + wave * 0.01).clamp(0.0, 0.20);
+    _aiHand = List.generate(kHandSize, (_) {
+      final r = _rng.nextDouble();
+      if (r < generalChance) {
+        final gKeys = kGenerals.keys.toList();
+        final gKey = gKeys[_rng.nextInt(gKeys.length)];
+        final g = kGenerals[gKey]!;
+        final char = g.chars[_rng.nextInt(g.chars.length)];
+        return HandCard(type: 'general_char', key: char, generalKey: gKey, charStr: char);
+      } else {
+        final keys = kBasicUnits.keys.toList();
+        return HandCard(type: 'unit', key: keys[_rng.nextInt(keys.length)]);
+      }
+    });
+  }
+
+  // 從手牌放一張（有智能優先級）
+  void _aiDeployOneCard() {
     final s = notifier.state;
+
+    // 1. 先嘗試手牌合并：同種同級基礎兵 → 升級，free up slot
+    for (int i = 0; i < kHandSize; i++) {
+      final ci = _aiHand[i];
+      if (ci == null || ci.type == 'general_char') continue;
+      for (int j = i + 1; j < kHandSize; j++) {
+        final cj = _aiHand[j];
+        if (cj == null) continue;
+        if (ci.type == cj.type && ci.key == cj.key && ci.level == cj.level &&
+            ci.level < (kBasicUnits[ci.key]?.maxLevel ?? 5)) {
+          _aiHand[i] = ci.copyWith(level: ci.level + 1);
+          _aiHand[j] = null;
+          return; // 本輪只合一次
+        }
+      }
+    }
+
+    // 2. 選出最高優先度的牌
+    // 優先：武將字 chars[0]（好讓下輪 chars[1] 配對）
+    int? pickIdx;
+
+    // 找手牌裡配對可激活的武將字（手牌有兩個相同 generalKey → 優先出 chars[0]）
+    for (int i = 0; i < kHandSize; i++) {
+      final ci = _aiHand[i];
+      if (ci == null || ci.type != 'general_char') continue;
+      final gDef = kGenerals[ci.generalKey ?? ''];
+      if (gDef == null) continue;
+      if (ci.charStr != gDef.chars[0]) continue; // 只找主字
+      for (int j = 0; j < kHandSize; j++) {
+        if (i == j) continue;
+        final cj = _aiHand[j];
+        if (cj?.type == 'general_char' && cj?.generalKey == ci.generalKey &&
+            cj?.charStr == gDef.chars[1]) {
+          pickIdx = i; // 有配對，優先主字
+          break;
+        }
+      }
+      if (pickIdx != null) break;
+    }
+
+    // 次優先：棋盤上已有某 generalKey 主字 → 優先出手牌裡對應次字
+    if (pickIdx == null) {
+      for (int r = 0; r < kRows; r++) {
+        for (int c = 0; c < kCols; c++) {
+          final unit = s.aiBoard[r][c].unit;
+          if (unit?.type != 'general_char') continue;
+          final gDef = kGenerals[unit?.generalKey ?? ''];
+          if (gDef == null) continue;
+          if ((unit?.charStr ?? unit?.key) != gDef.chars[0]) continue;
+          // 棋盤有主字 → 找手牌次字
+          for (int i = 0; i < kHandSize; i++) {
+            final ci = _aiHand[i];
+            if (ci?.type == 'general_char' && ci?.generalKey == unit?.generalKey &&
+                ci?.charStr == gDef.chars[1]) {
+              pickIdx = i;
+              break;
+            }
+          }
+          if (pickIdx != null) break;
+        }
+        if (pickIdx != null) break;
+      }
+    }
+
+    // 其餘：第一張非空牌
+    pickIdx ??= _aiHand.indexWhere((c) => c != null);
+    if (pickIdx == -1) return;
+
+    final card = _aiHand[pickIdx]!;
+
+    // 3. 找部署格
     final vacant = <List<int>>[];
     for (int r = 0; r < kRows; r++) {
       for (int c = 0; c < kCols; c++) {
@@ -580,14 +678,64 @@ class TowerDefenseGame extends FlameGame {
         }
       }
     }
-    if (vacant.isEmpty) return;
-    // 優先靠近路線的格（AI路線：右列 col=kCols-2、底行 row=kRows-2、左列 col=1）
-    final near = vacant.where((p) =>
-        p[1] == kCols - 2 || p[0] == kRows - 2 || p[1] == 1).toList();
-    final pool = near.isNotEmpty ? near : vacant;
-    final pos  = pool[_rng.nextInt(pool.length)];
-    final keys = kBasicUnits.keys.toList();
-    notifier.aiDeployUnit(keys[_rng.nextInt(keys.length)], pos[0], pos[1]);
+    if (vacant.isEmpty) {
+      // 棋盤滿 → 嘗試升級再試
+      notifier.aiMergeUnits();
+      return;
+    }
+
+    List<int> bestPos;
+
+    if (card.type == 'general_char') {
+      final gKey = card.generalKey ?? '';
+      final gDef = kGenerals[gKey];
+      final isSecond = gDef != null && card.charStr == gDef.chars[1];
+
+      // 若放次字，找棋盤主字旁邊的空格
+      if (isSecond) {
+        List<int>? adj;
+        outer:
+        for (int r = 0; r < kRows; r++) {
+          for (int c = 0; c < kCols; c++) {
+            final u = s.aiBoard[r][c].unit;
+            if (u?.type != 'general_char' || u?.generalKey != gKey) continue;
+            if ((u?.charStr ?? u?.key) != gDef.chars[0]) continue;
+            // 優先右邊，其次下方
+            for (final d in [[0,1],[1,0],[0,-1],[-1,0]]) {
+              final nr = r + d[0]; final nc = c + d[1];
+              if (nr < 0 || nr >= kRows || nc < 0 || nc >= kCols) continue;
+              if (s.aiBoard[nr][nc].kind == CellKind.unlocked &&
+                  s.aiBoard[nr][nc].unit == null) {
+                adj = [nr, nc];
+                break outer;
+              }
+            }
+          }
+        }
+        bestPos = adj ?? vacant[_rng.nextInt(vacant.length)];
+      } else {
+        // 主字：靠近路線的格
+        final near = vacant.where((p) =>
+            p[1] == kCols - 2 || p[0] == kRows - 2 || p[1] == 1).toList();
+        bestPos = (near.isNotEmpty ? near : vacant)[_rng.nextInt(
+            (near.isNotEmpty ? near : vacant).length)];
+      }
+    } else {
+      // 普通兵：靠近 AI 路線（AI路線：右列→底行→左列，close cols = kCols-2, rows = kRows-2）
+      final near = vacant.where((p) =>
+          p[1] == kCols - 2 || p[0] == kRows - 2 || p[1] == 1).toList();
+      bestPos = (near.isNotEmpty ? near : vacant)[_rng.nextInt(
+          (near.isNotEmpty ? near : vacant).length)];
+    }
+
+    notifier.aiDeployUnit(
+      card.key, bestPos[0], bestPos[1],
+      level: card.level,
+      type: card.type,
+      generalKey: card.generalKey,
+      charStr: card.charStr,
+    );
+    _aiHand[pickIdx] = null;
   }
 
   // ── Render ──────────────────────────────────────────

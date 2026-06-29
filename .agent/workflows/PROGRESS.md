@@ -93,6 +93,7 @@
 | 2026-06-28 | **Flutter 視覺全面還原（對齊 Vue H5）** | `tower_defense_game.dart`, `game_screen.dart`, `top_bar.dart` | 平滑移動/蔣HP心形/敵軍血條頂部/白色卡牌外框/鎖定格+號/對決分割線/虛線+攻擊圓圈/鏟子高亮/單位詳情彈窗/危警告/準備提示文字 |
 | 2026-06-29 | **重寫武將系統：持續配對+打瞌睡+擊殺升級** | `tower_defense_game.dart`, `game_notifier.dart` | 移除「消耗字牌生成武將」舊邏輯；改為相鄰順序正確→兩格同時金色激活，可拆開失效；solo字牌顯示打瞌睡z；每激活對每殺level×5次升一級，最高5級；武將技能照舊（每3攻觸發） |
 | 2026-06-29 | **修復4個Bug + 波次數量固定10** | `hand_cards.dart`, `game_screen.dart`, `game_notifier.dart`, `config.dart` | 1. 征兵後手牌變灰→移除DragTarget包裹；2. 棋盤單位點選選中+移動（青色高亮）；3. 手牌同類合并（位置判斷，Y>height-180觸發）；4. 每波固定10敵，BOSS波單獨登場 |
+| 2026-06-29 | **AI 強化：手牌系統 + 招募按鈕閃爍** | `tower_defense_game.dart`, `game_notifier.dart`, `hand_cards.dart` | AI 新增5格手牌(_aiHand)，逐張部署(0.8~2s/張)，手牌優先合并同等級基礎兵，智能武將配對(優先部署能激活配對的字牌，次字靠主字旁邊)，手牌空才招募；征兵按鈕糧食充足時綠色光暈脈動(AnimationController repeat/reverse 600ms) |
 
 ---
 
@@ -102,7 +103,7 @@
 |------|---------|--------|------|
 | 虛線效果待實際驗證 | 拖放 UI | 高 | 待測試 |
 | 攻擊圓圈大小是否準確 | 拖放 UI | 高 | 待測試 |
-| AI 策略偏隨機，缺乏威脅性 | AI 系統 | 中 | 待改進 |
+| AI 策略偏隨機，缺乏威脅性 | AI 系統 | 中 | ✅ 已改進（手牌系統+武將配對） |
 | project-tracking-templates.zip 在專案目錄導致 Vite EBUSY | 開發環境 | 低 | 已知，zip 應移出專案目錄 |
 
 ---
