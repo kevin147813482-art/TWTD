@@ -80,6 +80,9 @@ class TowerDefenseGame extends FlameGame {
   // 打瞌睡動畫計時（累積ms，用於閃爍 z）
   double _sleepAnimMs = 0;
 
+  // 農民道具計時
+  double _farmerMs = 0;
+
   // 波次計時
   double _waveTimerMs   = 0;
   int _spawnedThisWave  = 0;
@@ -161,6 +164,7 @@ class TowerDefenseGame extends FlameGame {
     _updateProjectiles(dtMs);
     _waveScheduler(dtMs);
     _aiTick(dtMs);
+    _farmerTick(dtMs);
     _sleepAnimMs += dtMs;
   }
 
@@ -473,6 +477,14 @@ class TowerDefenseGame extends FlameGame {
   }
 
   // ── 波次生成 ────────────────────────────────────────
+
+  void _farmerTick(double dtMs) {
+    _farmerMs += dtMs;
+    if (_farmerMs >= kFarmerIntervalMs) {
+      _farmerMs -= kFarmerIntervalMs;
+      notifier.farmerTick();
+    }
+  }
 
   void _waveScheduler(double dtMs) {
     if (_wavePending) return;

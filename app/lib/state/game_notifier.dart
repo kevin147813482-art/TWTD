@@ -55,9 +55,11 @@ class GameNotifier extends StateNotifier<GameUiState> {
   // 武將字：15%（波1）→ 20%（波6+），每波+1%
   // 鏟子：8%（固定）
   // 基礎兵：剩餘（約77%→72%）
+  // 概率分配：武將字 15~20% | 鏟子 8% | 農民 5% | 基礎兵 剩餘
   HandCard _randomHandCard(int wave) {
     final generalChance = min(0.15 + wave * 0.01, 0.20);
     const shovelChance = 0.08;
+    const farmerChance = kFarmerChance;
     final r = _rng.nextDouble();
     if (r < generalChance) {
       final gKeys = kGenerals.keys.toList();
@@ -67,6 +69,8 @@ class GameNotifier extends StateNotifier<GameUiState> {
       return HandCard(type: 'general_char', key: char, generalKey: gKey, charStr: char);
     } else if (r < generalChance + shovelChance) {
       return const HandCard(type: 'shovel', key: '鏟');
+    } else if (r < generalChance + shovelChance + farmerChance) {
+      return const HandCard(type: 'item', key: '農');
     } else {
       final keys = kBasicUnits.keys.toList();
       return HandCard(type: 'unit', key: keys[_rng.nextInt(keys.length)]);
@@ -389,6 +393,42 @@ class GameNotifier extends StateNotifier<GameUiState> {
 
   void aiAddFood(int amount) {
     state = state.copyWith(aiFood: state.aiFood + amount);
+  }
+
+  // ── 道具槽操作 ────────────────────────────────────────
+
+  // 將手牌道具（type=='item'）放入道具槽：0-1=主動，2-7=被動
+  void placeItemInSlot(int handIndex, int slotIndex) {
+    final card = state.playerHand[handIndex];
+    if (card == null || card.type != 'item') return;
+    final itemDef = kItems[card.key];
+    if (itemDef == null) return;
+    // 主動槽只能放主動道具，被動槽只能放被動道具
+    final isActiveSlot = slotIndex <= 1;
+    if (isActiveSlot && itemDef.slotType != 'active') return;
+    if (!isActiveSlot && itemDef.slotType != 'passive') return;
+    // 槽已有道具則不替換（需先移除才能放新的）
+    if (state.playerItemSlots[slotIndex] != null) return;
+
+    final newHand = List<HandCard?>.from(state.playerHand);
+    newHand[handIndex] = null;
+    final newSlots = List<ItemCard?>.from(state.playerItemSlots);
+    newSlots[slotIndex] = ItemCard(key: card.key, slotType: itemDef.slotType);
+    state = state.copyWith(playerHand: newHand, playerItemSlots: newSlots);
+  }
+
+  // 農民道具觸發（由引擎每 kFarmerIntervalMs 呼叫一次）
+  // 每個農民道具在被動槽（2-7）各+1糧食
+  void farmerTick() {
+    final slots = state.playerItemSlots;
+    int count = 0;
+    for (int i = 2; i <= 7; i++) {
+      if (slots[i]?.key == '農') count++;
+    }
+    if (count == 0) return;
+    state = state.copyWith(
+      playerFood: (state.playerFood + count).clamp(0, 99),
+    );
   }
 
   // AI 嘗試合併相鄰同種同級單位（對齊 Vue aiTryMerge）

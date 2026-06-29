@@ -144,6 +144,23 @@ const List<MapDef> kMaps = [
   MapDef(id:'dujiang',  name:'渡江', bgColor:0xFF4fc3f7),
 ];
 
+// ── 道具配置 ─────────────────────────────────────────
+class ItemDef {
+  final String key;
+  final String name;
+  final String slotType; // 'passive' | 'active'
+  final String effect;
+  const ItemDef({required this.key, required this.name,
+                 required this.slotType, required this.effect});
+}
+
+const Map<String, ItemDef> kItems = {
+  '農': ItemDef(key:'農', name:'農民', slotType:'passive', effect:'每3秒+1糧食'),
+};
+
+const double kFarmerIntervalMs = 3000;
+const double kFarmerChance = 0.05; // 征兵池農民概率
+
 // ── 工具函數 ─────────────────────────────────────────
 int getRecruitCost(int times) => kRecruitBaseCost + times * kRecruitCostIncrement;
 

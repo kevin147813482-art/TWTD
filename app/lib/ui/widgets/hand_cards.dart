@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../state/providers.dart';
 import '../../state/models.dart';
+import '../../state/game_notifier.dart';
 import '../../game/config.dart';
 
 // 由 GameScreen 傳入，用於拖放交互
@@ -76,9 +77,14 @@ class _HandAreaOverlayState extends ConsumerState<HandAreaOverlay>
       }
     }
 
+    final notifier = ref.read(gameNotifierProvider.notifier);
+
     return Column(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
+        // 道具槽（主動2 + 被動6）
+        _ItemSlotsRow(slots: s.playerItemSlots, notifier: notifier),
+        const SizedBox(height: 4),
         // 行動按鈕列
         _ActionRow(s: s, flashAnim: _flashCtrl),
         const SizedBox(height: 4),
@@ -290,6 +296,7 @@ class _CardFace extends StatelessWidget {
 
   Color _cardBg(HandCard c) {
     if (c.type == 'shovel')       return const Color(0xFF3e2723);
+    if (c.type == 'item')         return const Color(0xFF1a237e);
     if (c.type == 'general' ||
         c.type == 'general_char') return const Color(0xFF3a2a00);
     return const Color(0xFF1a3a1a);
@@ -297,6 +304,7 @@ class _CardFace extends StatelessWidget {
 
   Color _cardBorder(HandCard c) {
     if (c.type == 'shovel')       return const Color(0xFF8D6E63);
+    if (c.type == 'item')         return const Color(0xFF90CAF9);
     if (c.type == 'general' ||
         c.type == 'general_char') return const Color(0xFFFFD700);
     return const Color(0xFF4CAF50);
@@ -304,16 +312,112 @@ class _CardFace extends StatelessWidget {
 
   Color _cardTextColor(HandCard c) {
     if (c.type == 'general' || c.type == 'general_char') return const Color(0xFFFFD700);
+    if (c.type == 'item') return const Color(0xFF90CAF9);
     return Colors.white;
   }
 
   String _cardLabel(HandCard c) {
     if (c.type == 'shovel')       return '鏟子';
+    if (c.type == 'item')         return kItems[c.key]?.name ?? '道具';
     if (c.type == 'general')      return '武將';
     if (c.type == 'general_char') return '文字';
     return c.key == '步' ? '步兵'
          : c.key == '炮' ? '炮兵'
          : c.key == '槍' ? '機槍'
          : c.key == '坦' ? '坦克' : '';
+  }
+}
+
+// ── 道具槽列（主動2 + 被動6）─────────────────────────────
+class _ItemSlotsRow extends StatelessWidget {
+  final List<ItemCard?> slots;
+  final GameNotifier notifier;
+  const _ItemSlotsRow({required this.slots, required this.notifier});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Row(
+        children: [
+          // 標籤
+          const Text('道具', style: TextStyle(color: Color(0x88FFFFFF), fontSize: 10)),
+          const SizedBox(width: 6),
+          // 主動2槽
+          ...List.generate(2, (i) => _ItemSlotCell(
+            index: i, item: slots[i], label: '主', notifier: notifier,
+          )),
+          const SizedBox(width: 6),
+          // 被動6槽
+          ...List.generate(6, (i) => _ItemSlotCell(
+            index: i + 2, item: slots[i + 2], label: '被', notifier: notifier,
+          )),
+        ],
+      ),
+    );
+  }
+}
+
+class _ItemSlotCell extends StatelessWidget {
+  final int index;
+  final ItemCard? item;
+  final String label;
+  final GameNotifier notifier;
+  const _ItemSlotCell({
+    required this.index, required this.item,
+    required this.label, required this.notifier,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DragTarget<int>(
+      onWillAcceptWithDetails: (details) {
+        // details.data = handIndex，在 game_screen 的 onDragStart 回調中已記錄 card type
+        return true;
+      },
+      onAcceptWithDetails: (details) {
+        notifier.placeItemInSlot(details.data, index);
+      },
+      builder: (ctx, candidateData, rejectedData) {
+        final isHover = candidateData.isNotEmpty;
+        return Container(
+          width: 36, height: 36,
+          margin: const EdgeInsets.symmetric(horizontal: 2),
+          decoration: BoxDecoration(
+            color: item != null
+                ? const Color(0xFF1a237e)
+                : isHover
+                    ? const Color(0x4490CAF9)
+                    : const Color(0x22FFFFFF),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: item != null
+                  ? const Color(0xFF90CAF9)
+                  : isHover
+                      ? const Color(0xFF90CAF9)
+                      : const Color(0x33FFFFFF),
+              width: 1.0,
+            ),
+          ),
+          child: item != null
+              ? Center(
+                  child: Text(
+                    item!.key,
+                    style: const TextStyle(
+                      color: Color(0xFF90CAF9),
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                )
+              : Center(
+                  child: Text(
+                    label,
+                    style: const TextStyle(color: Color(0x44FFFFFF), fontSize: 9),
+                  ),
+                ),
+        );
+      },
+    );
   }
 }
