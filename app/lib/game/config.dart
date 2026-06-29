@@ -48,7 +48,7 @@ class UnitDef {
   final String attackType; // 'single' | 'pierce' | 'area'
   final double atk;
   final double atkSpeed;   // 每秒攻擊次數
-  final int range;         // 格子數
+  final double range;      // 格子數（支援 1.5 等非整數）
   final int maxLevel;
   const UnitDef({
     required this.key, required this.name, required this.attackType,
@@ -61,7 +61,7 @@ const Map<String, UnitDef> kBasicUnits = {
   '步': UnitDef(key:'步', name:'步兵',   attackType:'single', atk:3.0, atkSpeed:1.25, range:1),
   '炮': UnitDef(key:'炮', name:'炮兵',   attackType:'pierce', atk:2.0, atkSpeed:1.25, range:3),
   '槍': UnitDef(key:'槍', name:'機槍手', attackType:'single', atk:2.0, atkSpeed:1.25, range:2),
-  '坦': UnitDef(key:'坦', name:'坦克',   attackType:'area',   atk:2.0, atkSpeed:1.25, range:1),
+  '坦': UnitDef(key:'坦', name:'坦克',   attackType:'area',   atk:2.0, atkSpeed:1.25, range:1.5),
 };
 
 class GeneralDef {
@@ -71,7 +71,7 @@ class GeneralDef {
   final double atk;
   final double atkSpeed;
   final String attackType;
-  final int range;
+  final double range;
   final String skill;
   const GeneralDef({
     required this.key, required this.fullName, required this.chars,
@@ -147,7 +147,8 @@ const List<MapDef> kMaps = [
 // ── 工具函數 ─────────────────────────────────────────
 int getRecruitCost(int times) => kRecruitBaseCost + times * kRecruitCostIncrement;
 
-int getWaveEnemyCount(int wave) => min(2 + wave, 20); // wave1→3, wave2→4, 對齊Vue: 3+(wave-1)
+// 每波固定 10 個；BOSS 波由引擎單獨處理，不佔此數量
+int getWaveEnemyCount(int wave) => 10;
 
 double getWaveHpMult(int wave) {
   if (wave <= 1) return 1.0;
@@ -156,10 +157,23 @@ double getWaveHpMult(int wave) {
   return mult;
 }
 
-// 路線進度 → 格子座標
+// 路線進度 → 格子座標（整數，用於攻擊判定）
 List<int> getPathCell(double progress, List<List<int>> path) {
   final idx = progress.floor().clamp(0, path.length - 1);
   return path[idx];
+}
+
+// 路線進度 → 插值位置（浮點數，對齊 Vue getPathPos，平滑渲染用）
+({double row, double col}) getPathPos(double progress, List<List<int>> path) {
+  final max = path.length - 1;
+  final idx = progress.floor().clamp(0, max);
+  final frac = progress - idx;
+  final r0 = path[idx][0].toDouble();
+  final c0 = path[idx][1].toDouble();
+  if (idx >= max) return (row: r0, col: c0);
+  final r1 = path[idx + 1][0].toDouble();
+  final c1 = path[idx + 1][1].toDouble();
+  return (row: r0 + (r1 - r0) * frac, col: c0 + (c1 - c0) * frac);
 }
 
 // 兩格距離（Chebyshev，與原 engine.js 一致）

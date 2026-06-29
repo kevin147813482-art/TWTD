@@ -1,6 +1,6 @@
 # 塔防対決 — 開發進度總覽
 
-> 最後更新：2026-06-28
+> 最後更新：2026-06-29
 
 ---
 
@@ -33,7 +33,7 @@
 - [x] 敵軍沿路線行進（插值平滑移動）
 - [x] 單位攻擊判定（single/pierce/area）
 - [x] 投射物動畫（slash/bullet/shell/arrow）
-- [x] 波次系統（第1波3只，每波+1，最多20）
+- [x] 波次系統（每波固定10個，BOSS波單獨登場）
 - [x] 血量縮放（每波×1.25）
 - [x] 蔣受傷閃爍動畫
 - [x] 危險警告（敵軍接近蔣時顯示「危」）
@@ -54,7 +54,9 @@
 - [x] 合併升級（同兵種同等級 → 升一級）
 - [x] 替換邏輯（不同兵種/等級 → 替換，原單位退回手牌）
 - [ ] 鏟子功能完整實作
-- [ ] 武將系統完整展示
+- [x] 武將拼字激活系統：相鄰順序正確→兩格金色邊框激活，solo 打瞌睡
+- [x] 武將擊殺升級（level×5 kills/級，最高5級）
+- [x] 武將技能：每3次攻擊觸發（pierce全場/area眩暈/single爆傷）
 
 ---
 
@@ -88,6 +90,9 @@
 | 2026-06-28 | P0 手牌飛入動畫：從右側逐張飛入，右邊卡先到（index 4→0，55ms 間距） | `gameStore.js`, `GameBoard.vue` | 對齊參考遊戲手感 |
 | 2026-06-28 | P1 鏟子功能：⛏+1 按鈕加鏟子到手牌，持鏟時鎖定格橘色脈動高亮 | `GameBoard.vue` | openCell 接線完成 |
 | 2026-06-28 | **Flutter 移植：修復 10 個核心 Bug，對齊 Vue 版玩法** | `tower_defense_game.dart`, `game_notifier.dart`, `config.dart`, `game_screen.dart` | 攻擊目標修正/投射物方向/deploy-swap/move-swap/蔣受擊+10糧食/波次計數/速度校正/prep→playing時序/AI在prep佈防/蔣不重複渲染 |
+| 2026-06-28 | **Flutter 視覺全面還原（對齊 Vue H5）** | `tower_defense_game.dart`, `game_screen.dart`, `top_bar.dart` | 平滑移動/蔣HP心形/敵軍血條頂部/白色卡牌外框/鎖定格+號/對決分割線/虛線+攻擊圓圈/鏟子高亮/單位詳情彈窗/危警告/準備提示文字 |
+| 2026-06-29 | **重寫武將系統：持續配對+打瞌睡+擊殺升級** | `tower_defense_game.dart`, `game_notifier.dart` | 移除「消耗字牌生成武將」舊邏輯；改為相鄰順序正確→兩格同時金色激活，可拆開失效；solo字牌顯示打瞌睡z；每激活對每殺level×5次升一級，最高5級；武將技能照舊（每3攻觸發） |
+| 2026-06-29 | **修復4個Bug + 波次數量固定10** | `hand_cards.dart`, `game_screen.dart`, `game_notifier.dart`, `config.dart` | 1. 征兵後手牌變灰→移除DragTarget包裹；2. 棋盤單位點選選中+移動（青色高亮）；3. 手牌同類合并（位置判斷，Y>height-180觸發）；4. 每波固定10敵，BOSS波單獨登場 |
 
 ---
 

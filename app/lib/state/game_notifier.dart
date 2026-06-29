@@ -51,17 +51,36 @@ class GameNotifier extends StateNotifier<GameUiState> {
 
   // ── 玩家操作 ──────────────────────────────────────────
 
+  // 波次遞增（對齊原版範圍）
+  // 武將字：15%（波1）→ 20%（波6+），每波+1%
+  // 鏟子：6%（固定，原版5-8%，無波次衰減）
+  // 基礎兵：剩餘（約79%→74%）
+  HandCard _randomHandCard(int wave) {
+    final generalChance = min(0.15 + wave * 0.01, 0.20);
+    const shovelChance = 0.06;
+    final r = _rng.nextDouble();
+    if (r < generalChance) {
+      final gKeys = kGenerals.keys.toList();
+      final gKey = gKeys[_rng.nextInt(gKeys.length)];
+      final g = kGenerals[gKey]!;
+      final char = g.chars[_rng.nextInt(g.chars.length)];
+      return HandCard(type: 'general_char', key: char, generalKey: gKey, charStr: char);
+    } else if (r < generalChance + shovelChance) {
+      return const HandCard(type: 'shovel', key: '鏟');
+    } else {
+      final keys = kBasicUnits.keys.toList();
+      return HandCard(type: 'unit', key: keys[_rng.nextInt(keys.length)]);
+    }
+  }
+
   void playerRecruit() {
     final cost = state.playerRecruitCost;
     if (state.playerFood < cost) return;
 
+    final wave = state.wave;
     final newHand = List<HandCard?>.from(state.playerHand);
-    // 隨機產生 kHandSize 張牌填滿手牌
-    final keys = kBasicUnits.keys.toList();
     for (int i = 0; i < kHandSize; i++) {
-      final k = keys[_rng.nextInt(keys.length)];
-      final lv = _rng.nextDouble() < 0.2 ? 2 : 1;
-      newHand[i] = HandCard(type: 'unit', key: k, level: lv);
+      newHand[i] = _randomHandCard(wave);
     }
 
     state = state.copyWith(
@@ -72,12 +91,51 @@ class GameNotifier extends StateNotifier<GameUiState> {
     );
   }
 
+  // 手牌兩槽合成：同種同等級基礎兵 → 升一級（武將字不合成）
+  void mergeHandCards(int fromIndex, int toIndex) {
+    if (fromIndex == toIndex) return;
+    final hand = state.playerHand;
+    final from = hand[fromIndex];
+    final to   = hand[toIndex];
+    if (from == null || to == null) return;
+    if (from.type == 'general_char' || to.type == 'general_char') return;
+    if (from.type != to.type || from.key != to.key || from.level != to.level) return;
+    final maxLv = kBasicUnits[from.key]?.maxLevel ?? 5;
+    if (from.level >= maxLv) return;
+    final newHand = List<HandCard?>.from(hand);
+    newHand[toIndex]   = from.copyWith(level: from.level + 1);
+    newHand[fromIndex] = null;
+    state = state.copyWith(playerHand: newHand);
+  }
+
   void addShovelToHand() {
     final newHand = List<HandCard?>.from(state.playerHand);
     final slot = newHand.indexWhere((c) => c == null);
     if (slot == -1) return;
     newHand[slot] = const HandCard(type: 'shovel', key: '鏟');
     state = state.copyWith(playerHand: newHand);
+  }
+
+  // P0-1 武將升級回調（引擎設置，擊殺達閾值時升級場上兩張字牌）
+  void Function(String generalKey, int newLevel)? onGeneralLevelUp;
+
+  // 由引擎呼叫：將場上該武將的兩張字牌同時升一級
+  void generalLevelUp(String generalKey, int newLevel) {
+    if (newLevel > 5) return;
+    final newBoard = _copyBoard(state.playerBoard);
+    bool changed = false;
+    for (int r = 0; r < kRows; r++) {
+      for (int c = 0; c < kCols; c++) {
+        final unit = newBoard[r][c].unit;
+        if (unit?.type == 'general_char' && unit?.generalKey == generalKey) {
+          newBoard[r][c] = newBoard[r][c].copyWith(
+            unit: unit!.copyWith(level: newLevel),
+          );
+          changed = true;
+        }
+      }
+    }
+    if (changed) state = state.copyWith(playerBoard: newBoard);
   }
 
   void deployUnit(int handIndex, int row, int col) {
@@ -92,12 +150,13 @@ class GameNotifier extends StateNotifier<GameUiState> {
     final cell = board[row][col];
     if (cell.kind != CellKind.unlocked) return;
 
-    // 有單位：同種同級升級合並，否則替換（原單位退回手牌）
+    // 有單位：武將字牌不合并（不同字拼合，不升級）；基礎兵同種同級升級合並，否則替換
     if (cell.unit != null) {
       final existing = cell.unit!;
       final newBoard = _copyBoard(board);
       final newHand = List<HandCard?>.from(state.playerHand);
-      if (existing.key == card.key && existing.type == card.type &&
+      if (card.type != 'general_char' &&
+          existing.key == card.key && existing.type == card.type &&
           existing.level == card.level && existing.level < existing.maxLevel) {
         // 同兵種同等級 → 升級合並
         newBoard[row][col] = cell.copyWith(
@@ -107,7 +166,7 @@ class GameNotifier extends StateNotifier<GameUiState> {
         state = state.copyWith(playerBoard: newBoard, playerHand: newHand);
         return;
       }
-      // 不同兵種/等級 → 替換：原單位退回手牌，新卡放入
+      // 不同兵種/等級/武將字 → 替換：原單位退回手牌，新卡放入
       newHand[handIndex] = existing.toHandCard();
       newBoard[row][col] = cell.copyWith(
         unit: Unit(
@@ -156,7 +215,8 @@ class GameNotifier extends StateNotifier<GameUiState> {
 
     if (toCell.unit != null) {
       final target = toCell.unit!;
-      if (target.key == movingUnit.key && target.type == movingUnit.type &&
+      if (movingUnit.type != 'general_char' &&
+          target.key == movingUnit.key && target.type == movingUnit.type &&
           target.level == movingUnit.level && target.level < target.maxLevel) {
         // 同兵種同等級 → 合并升級
         newBoard[toRow][toCol] = toCell.copyWith(
@@ -268,6 +328,32 @@ class GameNotifier extends StateNotifier<GameUiState> {
 
   void aiAddFood(int amount) {
     state = state.copyWith(aiFood: state.aiFood + amount);
+  }
+
+  // AI 嘗試合併相鄰同種同級單位（對齊 Vue aiTryMerge）
+  bool aiMergeUnits() {
+    final board = state.aiBoard;
+    const deltas = [[-1,0],[1,0],[0,-1],[0,1]];
+    for (int r = 0; r < kRows; r++) {
+      for (int c = 0; c < kCols; c++) {
+        final unit = board[r][c].unit;
+        if (unit == null || unit.type != 'unit') continue;
+        for (final d in deltas) {
+          final nr = r + d[0], nc = c + d[1];
+          if (nr < 0 || nr >= kRows || nc < 0 || nc >= kCols) continue;
+          final nb = board[nr][nc].unit;
+          if (nb == null || nb.type != 'unit') continue;
+          if (unit.key == nb.key && unit.level == nb.level && unit.level < unit.maxLevel) {
+            final newBoard = _copyBoard(board);
+            newBoard[nr][nc] = board[nr][nc].copyWith(unit: nb.copyWith(level: nb.level + 1));
+            newBoard[r][c] = board[r][c].copyWith(clearUnit: true);
+            state = state.copyWith(aiBoard: newBoard);
+            return true;
+          }
+        }
+      }
+    }
+    return false;
   }
 
   // ── 工具 ────────────────────────────────────────────

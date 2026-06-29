@@ -18,6 +18,8 @@ class _Enemy {
   final double speed;
   final bool isBoss;
   bool markedDead = false;
+  // P0-2 技能：眩暈剩餘時間（ms），>0 時凍結移動
+  double stunnedMs = 0.0;
 
   _Enemy({
     required this.id, required this.key,
@@ -47,9 +49,10 @@ class _Projectile {
   bool get done => elapsedMs >= durationMs;
 
   static const Map<String, String> _chars = {
-    'slash': '✦', 'bullet': '·', 'shell': '●', 'arrow': '→',
+    'slash': '✦', 'bullet': '·', 'shell': '●', 'arrow': '→', 'skill': '★',
   };
   String get char => _chars[kind] ?? '·';
+  bool get isSkill => kind == 'skill';
 }
 
 // ── 引擎 ──────────────────────────────────────────────
@@ -70,6 +73,12 @@ class TowerDefenseGame extends FlameGame {
 
   // 攻擊冷卻
   final Map<String, double> _cooldowns = {};
+  // 技能：每個武將的攻擊次數計數，每3次觸發技能
+  final Map<String, int> _skillCharges = {};
+  // 武將擊殺累積（key = generalKey，達閾值升級）
+  final Map<String, int> _generalKills = {};
+  // 打瞌睡動畫計時（累積ms，用於閃爍 z）
+  double _sleepAnimMs = 0;
 
   // 波次計時
   double _waveTimerMs   = 0;
@@ -107,6 +116,10 @@ class TowerDefenseGame extends FlameGame {
     _updateLayout();
     overlays.add('topBar');
     overlays.add('handArea');
+    // 武將升級回調：引擎通知 notifier 更新字牌等級
+    notifier.onGeneralLevelUp = (generalKey, newLevel) {
+      notifier.generalLevelUp(generalKey, newLevel);
+    };
   }
 
   @override
@@ -146,12 +159,13 @@ class TowerDefenseGame extends FlameGame {
     _updateProjectiles(dtMs);
     _waveScheduler(dtMs);
     _aiTick(dtMs);
+    _sleepAnimMs += dtMs;
   }
 
   // 準備階段：蔣從营走到蔣位置
   void _updatePrep(double dt) {
     if (_prepDone) return;
-    const speed = 2.5;
+    const speed = 1.5; // 15步 / 1.5 = 10秒，對齊 Vue PREP_DURATION=10000ms
     _playerJiangProgress = min(
         _playerJiangProgress + speed * dt, kPlayerPath.length - 1.0);
     _aiJiangProgress = min(
@@ -170,9 +184,12 @@ class TowerDefenseGame extends FlameGame {
   // ── 敵軍移動 ────────────────────────────────────────
 
   void _moveEnemies(double dtMs) {
-    const speedScale = 0.0008;
+    // 反推自截圖：匪兵(speed=1.0)穿越15格路徑≈21秒 → 0.714格/秒 → 0.000714
+    const speedScale = 0.00072;
     for (final e in _playerEnemies) {
       if (e.markedDead) continue;
+      // P0-2 眩暈：倒計時，凍結移動
+      if (e.stunnedMs > 0) { e.stunnedMs -= dtMs; continue; }
       e.pathProgress += e.speed * dtMs * speedScale;
       if (e.pathProgress >= kPlayerPath.length - 1) {
         e.markedDead = true;
@@ -181,6 +198,7 @@ class TowerDefenseGame extends FlameGame {
     }
     for (final e in _aiEnemies) {
       if (e.markedDead) continue;
+      if (e.stunnedMs > 0) { e.stunnedMs -= dtMs; continue; }
       e.pathProgress += e.speed * dtMs * speedScale;
       if (e.pathProgress >= kAiPath.length - 1) {
         e.markedDead = true;
@@ -201,6 +219,54 @@ class TowerDefenseGame extends FlameGame {
         isAiPath: true, onKill: () => notifier.onAiEnemyKilled());
   }
 
+  // 若 unit 是某武將配對的「主字」（chars[0]），返回 GeneralDef，否則 null
+  GeneralDef? _getActivatedGeneral(Unit unit, int r, int c, List<List<Cell>> board) {
+    if (unit.type != 'general_char') return null;
+    final gKey = unit.generalKey;
+    if (gKey == null) return null;
+    final gDef = kGenerals[gKey];
+    if (gDef == null) return null;
+    final myChar = unit.charStr ?? unit.key;
+    if (myChar != gDef.chars[0]) return null; // 不是主字
+
+    // 右邊鄰格是次字？
+    if (c + 1 < kCols) {
+      final right = board[r][c + 1].unit;
+      if (right?.type == 'general_char' && right?.generalKey == gKey &&
+          (right?.charStr ?? right?.key) == gDef.chars[1]) return gDef;
+    }
+    // 下方鄰格是次字？
+    if (r + 1 < kRows) {
+      final below = board[r + 1][c].unit;
+      if (below?.type == 'general_char' && below?.generalKey == gKey &&
+          (below?.charStr ?? below?.key) == gDef.chars[1]) return gDef;
+    }
+    return null;
+  }
+
+  // 是否為某武將配對的「次字」（chars[1]，主字在左/上方）
+  bool _isGeneralSecondary(Unit unit, int r, int c, List<List<Cell>> board) {
+    if (unit.type != 'general_char') return false;
+    final gKey = unit.generalKey;
+    if (gKey == null) return false;
+    final gDef = kGenerals[gKey];
+    if (gDef == null) return false;
+    final myChar = unit.charStr ?? unit.key;
+    if (myChar != gDef.chars[1]) return false;
+
+    if (c > 0) {
+      final left = board[r][c - 1].unit;
+      if (left?.type == 'general_char' && left?.generalKey == gKey &&
+          (left?.charStr ?? left?.key) == gDef.chars[0]) return true;
+    }
+    if (r > 0) {
+      final above = board[r - 1][c].unit;
+      if (above?.type == 'general_char' && above?.generalKey == gKey &&
+          (above?.charStr ?? above?.key) == gDef.chars[0]) return true;
+    }
+    return false;
+  }
+
   void _processSideAttacks(
     List<List<Cell>> board,
     List<_Enemy> enemies,
@@ -216,6 +282,74 @@ class TowerDefenseGame extends FlameGame {
         final unit = board[r][c].unit;
         if (unit == null) continue;
 
+        // ── 武將字牌：solo 或次字不攻擊；主字且配對才攻擊 ──
+        if (unit.type == 'general_char') {
+          final gDef = _getActivatedGeneral(unit, r, c, board);
+          if (gDef == null) continue; // 未激活（solo 或次字）
+
+          final gKey = unit.generalKey!;
+          final level = unit.level;
+          final atk      = gDef.atk + (level - 1) * 1.5;
+          final atkSpeed = gDef.atkSpeed;
+          final range    = gDef.range;
+          final attackType = gDef.attackType;
+          final cdKey = '${side}_gen_${r}_$c';
+
+          _cooldowns.putIfAbsent(cdKey, () => 9999);
+          _cooldowns[cdKey] = _cooldowns[cdKey]! + dtMs;
+          if (_cooldowns[cdKey]! < 1000 / atkSpeed) continue;
+
+          final targets = <_Enemy>[];
+          for (final e in enemies) {
+            if (e.markedDead) continue;
+            final pathCell = getPathCell(e.pathProgress, path);
+            if (cellDist(r, c, pathCell[0], pathCell[1]) <= range) targets.add(e);
+          }
+          if (targets.isEmpty) continue;
+          targets.sort((a, b) => b.pathProgress.compareTo(a.pathProgress));
+          _cooldowns[cdKey] = 0;
+
+          // 武將擊殺 onKill 包含升級追蹤
+          void onGeneralKill() {
+            onKill();
+            if (level >= 5) return;
+            final kills = (_generalKills[gKey] ?? 0) + 1;
+            final needed = level * 5;
+            if (kills >= needed) {
+              _generalKills[gKey] = 0;
+              _postFrame(() => notifier.generalLevelUp(gKey, level + 1));
+            } else {
+              _generalKills[gKey] = kills;
+            }
+          }
+
+          // 技能計數
+          _skillCharges[cdKey] = (_skillCharges[cdKey] ?? 0) + 1;
+          if (_skillCharges[cdKey]! % 3 == 0) {
+            _fireGeneralSkillFromDef(
+                gDef, atk, range, attackType,
+                targets, enemies, side, r, c, path, onGeneralKill);
+            continue;
+          }
+
+          // 普攻
+          switch (attackType) {
+            case 'single':
+              _dealDamage(targets[0], atk, onGeneralKill);
+              _spawnProjectile(side, 'bullet', r, c, targets[0].pathProgress, path);
+            case 'pierce':
+              for (final t in targets) _dealDamage(t, atk, onGeneralKill);
+              if (targets.isNotEmpty) _spawnProjectile(side, 'arrow', r, c, targets[0].pathProgress, path);
+            case 'area':
+              for (int ti = 0; ti < targets.length; ti++) {
+                _dealDamage(targets[ti], ti == 0 ? atk : atk * 0.5, onGeneralKill);
+              }
+              if (targets.isNotEmpty) _spawnProjectile(side, 'shell', r, c, targets[0].pathProgress, path);
+          }
+          continue;
+        }
+
+        // ── 一般單位 ──
         final cdKey = unit.id;
         _cooldowns.putIfAbsent(cdKey, () => 9999);
         _cooldowns[cdKey] = _cooldowns[cdKey]! + dtMs;
@@ -239,23 +373,19 @@ class TowerDefenseGame extends FlameGame {
         switch (unit.attackType) {
           case 'single':
             _dealDamage(targets[0], unit.atk, onKill);
-            _spawnProjectile(side, 'bullet', r, c,
-                targets[0].pathProgress, path);
-            break;
+            _spawnProjectile(side, 'bullet', r, c, targets[0].pathProgress, path);
           case 'pierce':
             for (final t in targets) _dealDamage(t, unit.atk, onKill);
             if (targets.isNotEmpty) {
-              _spawnProjectile(side, 'arrow', r, c,
-                  targets[0].pathProgress, path);
+              _spawnProjectile(side, 'arrow', r, c, targets[0].pathProgress, path);
             }
-            break;
           case 'area':
-            for (final t in targets) _dealDamage(t, unit.atk, onKill);
-            if (targets.isNotEmpty) {
-              _spawnProjectile(side, 'shell', r, c,
-                  targets[0].pathProgress, path);
+            for (int ti = 0; ti < targets.length; ti++) {
+              _dealDamage(targets[ti], ti == 0 ? unit.atk : unit.atk * 0.5, onKill);
             }
-            break;
+            if (targets.isNotEmpty) {
+              _spawnProjectile(side, 'shell', r, c, targets[0].pathProgress, path);
+            }
         }
       }
     }
@@ -267,6 +397,52 @@ class TowerDefenseGame extends FlameGame {
       e.markedDead = true;
       _postFrame(onKill);
     }
+  }
+
+  // 武將技能：按 attackType 分三種效果
+  // pierce(謀略/鋼甲)：全場貫穿 1.5× | area(突擊/鐵拳)：範圍眩暈1.5s | single(天爐/守備)：3× 爆傷
+  void _fireGeneralSkillFromDef(
+    GeneralDef gDef, double atk, double range, String attackType,
+    List<_Enemy> targets, List<_Enemy> enemies,
+    String side, int r, int c, List<List<int>> path, VoidCallback onKill,
+  ) {
+    final targetCell = targets.isNotEmpty
+        ? getPathCell(targets[0].pathProgress, path)
+        : path[path.length ~/ 2];
+
+    switch (attackType) {
+      case 'pierce':
+        for (final e in enemies) {
+          if (!e.markedDead) _dealDamage(e, atk * 1.5, onKill);
+        }
+        _spawnSkillProjectile(side, r, c, path[path.length ~/ 2], path);
+      case 'area':
+        for (final e in enemies) {
+          if (e.markedDead) continue;
+          final ec = getPathCell(e.pathProgress, path);
+          if (cellDist(r, c, ec[0], ec[1]) <= range * 2) e.stunnedMs = 1500;
+        }
+        _spawnSkillProjectile(side, r, c, targetCell, path);
+      case 'single':
+      default:
+        if (targets.isNotEmpty) {
+          _dealDamage(targets[0], atk * 3, onKill);
+          _spawnSkillProjectile(side, r, c,
+              getPathCell(targets[0].pathProgress, path), path);
+        }
+    }
+  }
+
+  void _spawnSkillProjectile(
+      String side, int ur, int uc, List<int> targetCell, List<List<int>> path) {
+    final sourceIsAiBoard = side == 'ai';
+    final src = _cellCenter(ur, uc, isAiBoard: sourceIsAiBoard);
+    final dst = _cellCenter(targetCell[0], targetCell[1], isAiBoard: sourceIsAiBoard);
+    _projectiles.add(_Projectile(
+      id: _uid('sk'), kind: 'skill', side: side,
+      sx: src.dx, sy: src.dy, ex: dst.dx, ey: dst.dy,
+      durationMs: 500,
+    ));
   }
 
   // ── 投射物 ──────────────────────────────────────────
@@ -340,7 +516,7 @@ class TowerDefenseGame extends FlameGame {
       notifier.nextWave();
       return;
     }
-    final delay = _spawnedThisWave == 0 ? 0 : 600;
+    final delay = _spawnedThisWave == 0 ? 0 : 1200; // 對齊 Vue delay: i * 1200
     Future.delayed(Duration(milliseconds: delay), () {
       if (notifier.state.phase != GamePhase.playing) return;
       final key = _randomEnemy();
@@ -362,15 +538,14 @@ class TowerDefenseGame extends FlameGame {
     ));
   }
 
+  // 對齊 Vue getWaveEnemies 的波次動態分配
   String _randomEnemy() {
-    final entries = kEnemyTypes.entries.toList();
-    final total = entries.fold(0, (sum, e) => sum + e.value.weight);
-    int r = _rng.nextInt(total);
-    for (final e in entries) {
-      r -= e.value.weight;
-      if (r < 0) return e.key;
-    }
-    return entries.last.key;
+    final wave = notifier.state.wave;
+    final r = _rng.nextDouble();
+    if (wave <= 3)      return r < 0.80 ? '匪' : r < 0.95 ? '赤' : '共';
+    if (wave <= 5)      return r < 0.50 ? '匪' : r < 0.75 ? '赤' : r < 0.90 ? '共' : '寇';
+    if (wave <= 8)      return r < 0.30 ? '匪' : r < 0.55 ? '赤' : r < 0.80 ? '共' : '寇';
+    return               r < 0.15 ? '匪' : r < 0.40 ? '赤' : r < 0.70 ? '共' : '寇';
   }
 
   // ── AI 行為 ──────────────────────────────────────────
@@ -382,13 +557,16 @@ class TowerDefenseGame extends FlameGame {
     _aiTimerMs = 0;
 
     final s = notifier.state;
-    final cost = getRecruitCost(s.aiRecruitTimes);
-    if (s.aiFood >= cost) {
-      _postFrame(() {
+
+    // 有牌就偶爾先嘗試合併，再放牌
+    _postFrame(() {
+      if (_rng.nextDouble() < 0.15 && notifier.aiMergeUnits()) return;
+      final cost = getRecruitCost(notifier.state.aiRecruitTimes);
+      if (notifier.state.aiFood >= cost) {
         notifier.aiRecruit();
         _aiDeploy();
-      });
-    }
+      }
+    });
   }
 
   void _aiDeploy() {
@@ -403,7 +581,11 @@ class TowerDefenseGame extends FlameGame {
       }
     }
     if (vacant.isEmpty) return;
-    final pos  = vacant[_rng.nextInt(vacant.length)];
+    // 優先靠近路線的格（AI路線：右列 col=kCols-2、底行 row=kRows-2、左列 col=1）
+    final near = vacant.where((p) =>
+        p[1] == kCols - 2 || p[0] == kRows - 2 || p[1] == 1).toList();
+    final pool = near.isNotEmpty ? near : vacant;
+    final pos  = pool[_rng.nextInt(pool.length)];
     final keys = kBasicUnits.keys.toList();
     notifier.aiDeployUnit(keys[_rng.nextInt(keys.length)], pos[0], pos[1]);
   }
@@ -470,8 +652,52 @@ class TowerDefenseGame extends FlameGame {
         } else {
           _drawSpecialCellLabel(canvas, r, c, path, rect,
               jiangHp: jiangHp, jiangMaxHp: jiangMaxHp, hideJiang: isWalking);
-          if (cell.unit != null) _drawUnit(canvas, cell.unit!, rect);
+          if (cell.unit != null) {
+            // 武將字牌：計算激活狀態
+            GeneralDef? activatedAs;
+            bool isSecondary = false;
+            if (cell.unit!.type == 'general_char') {
+              activatedAs = _getActivatedGeneral(cell.unit!, r, c, board);
+              if (activatedAs == null) {
+                isSecondary = _isGeneralSecondary(cell.unit!, r, c, board);
+              }
+            }
+            _drawUnit(canvas, cell.unit!, rect,
+                activatedAs: activatedAs, isSecondaryOfPair: isSecondary);
+          }
         }
+      }
+    }
+
+    // 武將激活配對：繪製跨雙格的金色外框（顯示整體感）
+    for (int r = 0; r < kRows; r++) {
+      for (int c = 0; c < kCols; c++) {
+        final unit = board[r][c].unit;
+        if (unit == null) continue;
+        final gDef = _getActivatedGeneral(unit, r, c, board);
+        if (gDef == null) continue;
+        Rect? secRect;
+        if (c + 1 < kCols) {
+          final ru = board[r][c + 1].unit;
+          if (ru != null && _isGeneralSecondary(ru, r, c + 1, board)) {
+            secRect = _cellRect(r, c + 1, boardY);
+          }
+        }
+        if (secRect == null && r + 1 < kRows) {
+          final ru = board[r + 1][c].unit;
+          if (ru != null && _isGeneralSecondary(ru, r + 1, c, board)) {
+            secRect = _cellRect(r + 1, c, boardY);
+          }
+        }
+        if (secRect == null) continue;
+        final spanRect = _cellRect(r, c, boardY).expandToInclude(secRect).deflate(2);
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(spanRect, const Radius.circular(4)),
+          Paint()
+            ..color = const Color(0xFFFFD700)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 3.0,
+        );
       }
     }
 
@@ -513,11 +739,16 @@ class TowerDefenseGame extends FlameGame {
     }
   }
 
-  void _drawUnit(Canvas canvas, Unit unit, Rect rect) {
+  void _drawUnit(Canvas canvas, Unit unit, Rect rect, {
+    GeneralDef? activatedAs,    // 非null = 此格是激活配對的主字
+    bool isSecondaryOfPair = false, // 此格是激活配對的次字
+  }) {
     final inset = rect.deflate(_cellSize * 0.06);
+    final isActivatedGeneral = activatedAs != null || isSecondaryOfPair;
+    final isSoloChar = unit.type == 'general_char' && !isActivatedGeneral;
 
-    // 卡牌底色
-    final bg = (unit.type == 'general' || unit.type == 'general_char')
+    // 卡牌底色（general_char 統一深棕，不隨激活狀態改變地板色）
+    final bg = unit.type == 'general_char'
         ? const Color(0xFF3a2a00)
         : const Color(0xFFF0ECE0);
     canvas.drawRRect(
@@ -525,33 +756,56 @@ class TowerDefenseGame extends FlameGame {
       Paint()..color = bg,
     );
 
-    // 卡牌邊框（攻擊時橘色）
-    final borderColor = unit.attacking
-        ? const Color(0xFFFF5722)
-        : (unit.type == 'general' || unit.type == 'general_char')
-            ? const Color(0xFFFFD700)
-            : const Color(0xFFBBBBBB);
+    // 邊框：激活 = 金色粗框；solo = 暗灰；其他 = 普通
+    final Color borderColor;
+    final double borderWidth;
+    if (isActivatedGeneral) {
+      borderColor = const Color(0xFFFFD700);
+      borderWidth = 2.5;
+    } else if (isSoloChar) {
+      borderColor = const Color(0xFF555544);
+      borderWidth = 1.0;
+    } else {
+      borderColor = const Color(0xFFBBBBBB);
+      borderWidth = 1.5;
+    }
     canvas.drawRRect(
       RRect.fromRectAndRadius(inset, const Radius.circular(2)),
       Paint()
         ..color = borderColor
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5,
+        ..strokeWidth = borderWidth,
     );
 
-    // 等級角標（右上，>1 才顯示）
+    // 等級角標（右上，>1 才顯示，激活武將用金色）
     if (unit.level > 1) {
       final lv = _cellSize * 0.18;
       _drawChar(canvas, '${unit.level}',
         Rect.fromLTRB(inset.right - lv, inset.top, inset.right, inset.top + lv),
-        color: const Color(0xFF888888), fontSize: _cellSize * 0.15);
+        color: isActivatedGeneral
+            ? const Color(0xFFFFD700)
+            : const Color(0xFF888888),
+        fontSize: _cellSize * 0.15);
     }
 
-    // 主字
-    final textColor = (unit.type == 'general' || unit.type == 'general_char')
-        ? const Color(0xFFFFD700) : const Color(0xFF111111);
+    // 主字（solo 字牌稍微暗淡）
+    final textColor = isActivatedGeneral
+        ? const Color(0xFFFFD700)
+        : isSoloChar
+            ? const Color(0xAA998855)
+            : const Color(0xFF111111);
     _drawChar(canvas, unit.displayChar, rect,
         color: textColor, fontSize: _cellSize * 0.4);
+
+    // 打瞌睡 z：solo 字牌閃爍顯示，每 700ms 切換
+    if (isSoloChar && (_sleepAnimMs ~/ 700) % 2 == 0) {
+      final zRect = Rect.fromLTRB(
+        inset.right - _cellSize * 0.28, inset.top,
+        inset.right, inset.top + _cellSize * 0.28,
+      );
+      _drawChar(canvas, 'z', zRect,
+          color: const Color(0x88AAAAFF), fontSize: _cellSize * 0.2);
+    }
   }
 
   void _renderDivider(Canvas canvas) {
@@ -598,8 +852,7 @@ class TowerDefenseGame extends FlameGame {
         Paint()..color = const Color(0x44000000));
       canvas.drawRect(
         Rect.fromLTWH(cx - sz / 2, barTop, sz * hpRatio, 3),
-        Paint()..color = Color.fromARGB(200,
-            (255 * (1 - hpRatio)).toInt(), (200 * hpRatio).toInt(), 50));
+        Paint()..color = const Color(0xCCFF3333));
 
       _drawChar(canvas, e.key, rect,
           color: Color(e.color),
@@ -611,11 +864,14 @@ class TowerDefenseGame extends FlameGame {
     for (final p in _projectiles) {
       final x = p.sx + (p.ex - p.sx) * p.t;
       final y = p.sy + (p.ey - p.sy) * p.t;
-      final rect = Rect.fromCenter(
-          center: Offset(x, y),
-          width: _cellSize * 0.25, height: _cellSize * 0.25);
-      _drawChar(canvas, p.char, rect,
-          color: const Color(0xFFFFE082), fontSize: _cellSize * 0.22);
+      // 技能彈藥：★ 更大更金
+      final sz   = p.isSkill ? _cellSize * 0.38 : _cellSize * 0.25;
+      final fs   = p.isSkill ? _cellSize * 0.32 : _cellSize * 0.22;
+      final color = p.isSkill
+          ? const Color(0xFFFFD700)
+          : const Color(0xFFFFE082);
+      final rect = Rect.fromCenter(center: Offset(x, y), width: sz, height: sz);
+      _drawChar(canvas, p.char, rect, color: color, fontSize: fs);
     }
   }
 
