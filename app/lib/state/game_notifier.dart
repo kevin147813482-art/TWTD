@@ -53,11 +53,11 @@ class GameNotifier extends StateNotifier<GameUiState> {
 
   // 波次遞增（對齊原版範圍）
   // 武將字：15%（波1）→ 20%（波6+），每波+1%
-  // 鏟子：6%（固定，原版5-8%，無波次衰減）
-  // 基礎兵：剩餘（約79%→74%）
+  // 鏟子：8%（固定）
+  // 基礎兵：剩餘（約77%→72%）
   HandCard _randomHandCard(int wave) {
     final generalChance = min(0.15 + wave * 0.01, 0.20);
-    const shovelChance = 0.06;
+    const shovelChance = 0.08;
     final r = _rng.nextDouble();
     if (r < generalChance) {
       final gKeys = kGenerals.keys.toList();
@@ -318,6 +318,37 @@ class GameNotifier extends StateNotifier<GameUiState> {
     );
     final newBoard = _copyBoard(board);
     newBoard[row][col] = cell.copyWith(unit: unit);
+    state = state.copyWith(aiBoard: newBoard);
+  }
+
+  // AI 用鏟子解鎖格：優先解鎖鄰近已解鎖格且靠近路線的鎖定格
+  void aiUnlockCell() {
+    final board = state.aiBoard;
+    const deltas = [[-1,0],[1,0],[0,-1],[0,1]];
+    final candidates = <List<int>>[];
+    for (int r = 0; r < kRows; r++) {
+      for (int c = 0; c < kCols; c++) {
+        if (board[r][c].kind != CellKind.locked) continue;
+        for (final d in deltas) {
+          final nr = r + d[0]; final nc = c + d[1];
+          if (nr < 0 || nr >= kRows || nc < 0 || nc >= kCols) continue;
+          if (board[nr][nc].kind == CellKind.unlocked) {
+            candidates.add([r, c]);
+            break;
+          }
+        }
+      }
+    }
+    if (candidates.isEmpty) return;
+    // 優先靠近 AI 路線的格（col=kCols-2 或 row=kRows-2）
+    final near = candidates.where((p) =>
+        p[1] == kCols - 2 || p[0] == kRows - 2).toList();
+    final pool = near.isNotEmpty ? near : candidates;
+    final rng = Random();
+    final pos = pool[rng.nextInt(pool.length)];
+    final cell = board[pos[0]][pos[1]];
+    final newBoard = _copyBoard(board);
+    newBoard[pos[0]][pos[1]] = cell.copyWith(kind: CellKind.unlocked);
     state = state.copyWith(aiBoard: newBoard);
   }
 

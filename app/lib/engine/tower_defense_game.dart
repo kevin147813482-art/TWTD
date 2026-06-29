@@ -567,7 +567,7 @@ class TowerDefenseGame extends FlameGame {
   bool _aiTryMergeHand() {
     for (int i = 0; i < kHandSize; i++) {
       final ci = _aiHand[i];
-      if (ci == null || ci.type == 'general_char') continue;
+      if (ci == null || ci.type == 'general_char' || ci.type == 'shovel') continue;
       for (int j = i + 1; j < kHandSize; j++) {
         final cj = _aiHand[j];
         if (cj == null) continue;
@@ -617,11 +617,11 @@ class TowerDefenseGame extends FlameGame {
     });
   }
 
-  // 填 AI 手牌（概率完全對齊玩家；鏟子改抽基礎兵，AI無法使用鏟子）
+  // 填 AI 手牌（概率完全對齊玩家，含鏟子 8%；AI 拿到鏟子會解鎖格子）
   void _aiFillHand() {
     final wave = notifier.state.wave;
     final generalChance = min(0.15 + wave * 0.01, 0.20);
-    const shovelChance = 0.06;
+    const shovelChance = 0.08;
     final basicKeys = kBasicUnits.keys.toList();
     final gKeys = kGenerals.keys.toList();
     _aiHand = List.generate(kHandSize, (_) {
@@ -632,8 +632,7 @@ class TowerDefenseGame extends FlameGame {
         final char = g.chars[_rng.nextInt(g.chars.length)];
         return HandCard(type: 'general_char', key: char, generalKey: gKey, charStr: char);
       } else if (r < generalChance + shovelChance) {
-        // 鏟子 → 換成基礎兵（AI不用鏟子，但保持總概率分布一致）
-        return HandCard(type: 'unit', key: basicKeys[_rng.nextInt(basicKeys.length)]);
+        return const HandCard(type: 'shovel', key: '鏟');
       } else {
         return HandCard(type: 'unit', key: basicKeys[_rng.nextInt(basicKeys.length)]);
       }
@@ -697,7 +696,14 @@ class TowerDefenseGame extends FlameGame {
 
     final card = _aiHand[pickIdx]!;
 
-    // 3. 找部署格
+    // 3. 鏟子：解鎖格子
+    if (card.type == 'shovel') {
+      notifier.aiUnlockCell();
+      _aiHand[pickIdx] = null;
+      return;
+    }
+
+    // 4. 找部署格
     final vacant = <List<int>>[];
     for (int r = 0; r < kRows; r++) {
       for (int c = 0; c < kCols; c++) {
